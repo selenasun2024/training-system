@@ -1,0 +1,2001 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                                                                    String                      @id @default(uuid()) @db.VarChar(36)
+  username                                                              String                      @unique @db.VarChar(50)
+  email                                                                 String                      @unique @db.VarChar(255)
+  passwordHash                                                          String                      @map("password_hash") @db.VarChar(255)
+  name                                                                  String                      @db.VarChar(100)
+  department                                                            String?                     @db.VarChar(100)
+  position                                                              String?                     @db.VarChar(100)
+  level                                                                 String?                     @db.VarChar(20)
+  hireDate                                                              DateTime?                   @map("hire_date") @db.Date
+  lastLoginAt                                                           DateTime?                   @map("last_login_at")
+  status                                                                UserStatus                  @default(ACTIVE)
+  createdAt                                                             DateTime                    @default(now()) @map("created_at")
+  updatedAt                                                             DateTime                    @updatedAt @map("updated_at")
+  createdAttendance                                                     AttendanceRecord[]          @relation("AttendanceCreator")
+  attendanceRecords                                                     AttendanceRecord[]
+  groupMemberships                                                      GroupMember[]
+  growth_achievements                                                   growth_achievements[]
+  growth_feedback                                                       growth_feedback[]
+  growth_goals                                                          growth_goals[]
+  growth_mentorship_history_growth_mentorship_history_mentor_idTousers  growth_mentorship_history[] @relation("growth_mentorship_history_mentor_idTousers")
+  growth_mentorship_history_growth_mentorship_history_student_idTousers growth_mentorship_history[] @relation("growth_mentorship_history_student_idTousers")
+  growthProfiles                                                        GrowthProfile[]
+  notifications                                                         Notification[]
+  observerRecords                                                       ObservationRecord[]         @relation("ObserverRecords")
+  observationRecords                                                    ObservationRecord[]         @relation("StudentObservations")
+  projectParticipants                                                   ProjectParticipant[]
+  createdProjectTypes                                                   ProjectType[]               @relation("ProjectTypeCreator")
+  counselorRecommendations                                              Recommendation[]            @relation("RecommendationCounselor")
+  reviewedRecommendations                                               Recommendation[]            @relation("RecommendationReviewer")
+  studentRecommendations                                                Recommendation[]            @relation("RecommendationStudent")
+  createdStageTemplates                                                 StageTemplate[]
+  studentPerformance                                                    StudentPerformance[]        @relation("StudentPerformance")
+  reviewedSubmissions                                                   TaskSubmission[]            @relation("TaskReviewer")
+  taskSubmissions                                                       TaskSubmission[]
+  createdTaskTemplates                                                  TaskTemplate[]
+  ownedProjects                                                         TrainingProject[]           @relation("ProjectOwner")
+  assignedTasks                                                         TrainingTask[]
+  user_growth_profiles                                                  user_growth_profiles?
+  grantedRoles                                                          UserRole[]                  @relation("RoleGranter")
+  userRoles                                                             UserRole[]
+  proposalsSubmitted                                                    ProjectProposal[]           @relation("ProposalSubmitter")
+  proposalsCreated                                                      ProjectProposal[]           @relation("ProposalCreator")
+  approvals                                                             ProposalApproval[]          @relation("ApprovalApprover")
+
+  // 带教管理关联关系
+  mentorshipProjectsMentor   MentorshipProject[]      @relation("MentorshipMentor")
+  mentorshipProjectsStudent  MentorshipProject[]      @relation("MentorshipStudent")
+  mentorshipProjectsCreator  MentorshipProject[]      @relation("MentorshipCreator")
+  mentorshipProjectsApprover MentorshipProject[]      @relation("MentorshipApprover")
+  relationshipsMentor        MentorshipRelationship[] @relation("RelationshipMentor")
+  relationshipsStudent       MentorshipRelationship[] @relation("RelationshipStudent")
+  relationshipsCreator       MentorshipRelationship[] @relation("RelationshipCreator")
+  tasksCreator               MentorshipTask[]         @relation("TaskCreator")
+  interactionsRecorder       MentorshipInteraction[]  @relation("InteractionRecorder")
+  interactionsVerifier       MentorshipInteraction[]  @relation("InteractionVerifier")
+  evaluationsEvaluator       MentorshipEvaluation[]   @relation("EvaluationEvaluator")
+  evaluationsEvaluatee       MentorshipEvaluation[]   @relation("EvaluationEvaluatee")
+  plansCreator               MentorshipPlan[]         @relation("PlanCreator")
+  plansApprover              MentorshipPlan[]         @relation("PlanApprover")
+  resourcesCreator           MentorshipResource[]     @relation("ResourceCreator")
+  resourcesReviewer          MentorshipResource[]     @relation("ResourceReviewer")
+
+  @@index([status])
+  @@index([department])
+  @@index([level])
+  @@index([hireDate])
+  @@map("users")
+}
+
+model UserRole {
+  id        String           @id @default(uuid()) @db.VarChar(36)
+  userId    String           @map("user_id") @db.VarChar(36)
+  roleName  RoleName         @map("role_name")
+  projectId String?          @map("project_id") @db.VarChar(36)
+  grantedBy String           @map("granted_by") @db.VarChar(36)
+  grantedAt DateTime         @default(now()) @map("granted_at")
+  revokedAt DateTime?        @map("revoked_at")
+  status    RoleStatus       @default(ACTIVE)
+  granter   User             @relation("RoleGranter", fields: [grantedBy], references: [id])
+  project   TrainingProject? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleName, projectId])
+  @@index([userId, roleName])
+  @@index([projectId])
+  @@index([grantedBy], map: "user_roles_granted_by_fkey")
+  @@map("user_roles")
+}
+
+model ProjectType {
+  id                String                  @id @default(uuid()) @db.VarChar(36)
+  name              String                  @db.VarChar(255)
+  code              String                  @unique @db.VarChar(50)
+  description       String?                 @db.Text
+  remindDays        Int                     @default(7) @map("remind_days")
+  enabled           Boolean                 @default(true)
+  orderIndex        Int                     @default(0) @map("order_index")
+  icon              String?                 @db.VarChar(100)
+  color             String?                 @db.VarChar(20)
+  defaultGroupCount Int                     @default(3) @map("default_group_count")
+  config            Json
+  stageTemplateIds  Json                    @map("stage_template_ids")
+  taskTemplateIds   Json                    @map("task_template_ids")
+  filterRules       Json                    @map("filter_rules")
+  allowManualAdd    Boolean                 @default(true) @map("allow_manual_add")
+  isSystem          Boolean                 @default(false) @map("is_system")
+  createdBy         String?                 @map("created_by") @db.VarChar(36)
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  filterRuleItems   ProjectTypeFilterRule[]
+  creator           User?                   @relation("ProjectTypeCreator", fields: [createdBy], references: [id])
+  projects          TrainingProject[]
+
+  @@index([code])
+  @@index([enabled])
+  @@index([orderIndex])
+  @@index([isSystem])
+  @@index([createdBy], map: "project_types_created_by_fkey")
+  @@map("project_types")
+}
+
+model ProjectTypeFilterRule {
+  id            String      @id @default(uuid()) @db.VarChar(36)
+  projectTypeId String      @map("project_type_id") @db.VarChar(36)
+  ruleName      String      @map("rule_name") @db.VarChar(255)
+  description   String?     @db.Text
+  conditions    Json
+  priority      Int         @default(0)
+  enabled       Boolean     @default(true)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  projectType   ProjectType @relation(fields: [projectTypeId], references: [id], onDelete: Cascade)
+
+  @@index([projectTypeId])
+  @@index([enabled])
+  @@index([priority])
+  @@map("project_type_filter_rules")
+}
+
+model Collaboration {
+  id          String              @id @default(uuid())
+  projectId   String              @map("project_id") @db.VarChar(36)
+  name        String              @db.VarChar(255)
+  description String?             @db.Text
+  status      CollaborationStatus @default(ACTIVE)
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  project TrainingProject @relation(fields: [projectId], references: [id])
+}
+
+model TrainingProject {
+  id                        String                      @id @default(uuid()) @db.VarChar(36)
+  projectNo                 String                      @unique @map("project_no") @db.VarChar(50)
+  name                      String                      @db.VarChar(255)
+  description               String?                     @db.Text
+  status                    ProjectStatus               @default(DRAFT)
+  currentStage              StageType                   @default(BEFORE) @map("current_stage")
+  ownerId                   String                      @map("owner_id") @db.VarChar(36)
+  config                    Json
+  estimatedDuration         Int?                        @map("estimated_duration")
+  startDate                 DateTime?                   @map("start_date") @db.Date
+  endDate                   DateTime?                   @map("end_date") @db.Date
+  createdAt                 DateTime                    @default(now()) @map("created_at")
+  updatedAt                 DateTime                    @updatedAt @map("updated_at")
+  type                      String                      @db.VarChar(36)
+  budgetLines               BudgetLine[]
+  growth_mentorship_history growth_mentorship_history[]
+  growthProfiles            GrowthProfile[]
+  growth_training_history   growth_training_history[]
+  meetings                  Meeting[]
+  observationRecords        ObservationRecord[]
+  participants              ProjectParticipant[]
+  resources                 ProjectResource[]
+  recommendations           Recommendation[]
+  studentPerformances       StudentPerformance[]
+  groups                    TrainingGroup[]
+  owner                     User                        @relation("ProjectOwner", fields: [ownerId], references: [id])
+  projectType               ProjectType                 @relation(fields: [type], references: [id])
+  stages                    TrainingStage[]
+  tasks                     TrainingTask[]
+  proposals                 ProjectProposal[]
+  userRoles                 UserRole[]
+  collaborations            Collaboration[]
+  mentorshipProjects        MentorshipProject[]         @relation("MentorshipSourceProject")
+
+  @@index([status])
+  @@index([ownerId])
+  @@index([currentStage])
+  @@index([type])
+  @@map("training_projects")
+}
+
+// 项目方案表
+model ProjectProposal {
+  id           String         @id @default(uuid()) @db.VarChar(36)
+  projectId    String         @map("project_id") @db.VarChar(36)
+  title        String         @db.VarChar(255)
+  description  String?        @db.Text
+  status       ProposalStatus @default(DRAFT)
+  version      String         @default("1.0") @db.VarChar(20)
+  versionNotes String?        @map("version_notes") @db.Text
+  content      Json           @default("{}")
+  reportConfig Json           @default("{}") @map("report_config")
+  submittedAt  DateTime?      @map("submitted_at")
+  approvedAt   DateTime?      @map("approved_at")
+  rejectedAt   DateTime?      @map("rejected_at")
+  submittedBy  String?        @map("submitted_by") @db.VarChar(36)
+  createdBy    String         @map("created_by") @db.VarChar(36)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  project       TrainingProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  submitter     User?              @relation("ProposalSubmitter", fields: [submittedBy], references: [id])
+  creator       User               @relation("ProposalCreator", fields: [createdBy], references: [id])
+  approvalSteps ProposalApproval[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([submittedBy])
+  @@index([createdBy])
+  @@map("project_proposals")
+}
+
+// 方案审批记录表
+model ProposalApproval {
+  id           String             @id @default(uuid()) @db.VarChar(36)
+  proposalId   String             @map("proposal_id") @db.VarChar(36)
+  stepId       String             @map("step_id") @db.VarChar(50)
+  stepName     String             @map("step_name") @db.VarChar(100)
+  approverRole String             @map("approver_role") @db.VarChar(50)
+  approverId   String?            @map("approver_id") @db.VarChar(36)
+  status       ApprovalStepStatus @default(PENDING)
+  comments     String?            @db.Text
+  approvedAt   DateTime?          @map("approved_at")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  proposal ProjectProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  approver User?           @relation("ApprovalApprover", fields: [approverId], references: [id])
+
+  @@index([proposalId])
+  @@index([status])
+  @@index([approverId])
+  @@map("proposal_approvals")
+}
+
+model TrainingStage {
+  id                String          @id @default(uuid()) @db.VarChar(36)
+  projectId         String          @map("project_id") @db.VarChar(36)
+  name              String          @db.VarChar(255)
+  type              StageType
+  description       String?         @db.Text
+  orderIndex        Int             @default(0) @map("order_index")
+  status            StageStatus     @default(PENDING)
+  estimatedDuration Int?            @map("estimated_duration")
+  startDate         DateTime?       @map("start_date") @db.Date
+  endDate           DateTime?       @map("end_date") @db.Date
+  config            Json
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  meetings          Meeting[]
+  project           TrainingProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks             TrainingTask[]
+
+  @@index([projectId, type])
+  @@index([status])
+  @@map("training_stages")
+}
+
+model TrainingTask {
+  id                String             @id @default(uuid()) @db.VarChar(36)
+  projectId         String             @map("project_id") @db.VarChar(36)
+  stageId           String             @map("stage_id") @db.VarChar(36)
+  name              String             @db.VarChar(255)
+  description       String?            @db.Text
+  type              String             @db.VarChar(50)
+  status            TaskStatus         @default(PENDING)
+  required          Boolean            @default(false)
+  orderIndex        Int                @default(0) @map("order_index")
+  config            Json
+  assignedTo        String?            @map("assigned_to") @db.VarChar(36)
+  reviewerRole      ReviewerRole?      @map("reviewer_role")
+  dueDate           DateTime?          @map("due_date")
+  estimatedHours    Int?               @map("estimated_hours")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  attendanceRecords AttendanceRecord[]
+  submissions       TaskSubmission[]
+  assignee          User?              @relation(fields: [assignedTo], references: [id])
+  project           TrainingProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stage             TrainingStage      @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, stageId])
+  @@index([type, status])
+  @@index([assignedTo])
+  @@index([stageId], map: "training_tasks_stage_id_fkey")
+  @@map("training_tasks")
+}
+
+model TaskSubmission {
+  id          String               @id @default(uuid()) @db.VarChar(36)
+  taskId      String               @map("task_id") @db.VarChar(36)
+  studentId   String               @map("student_id") @db.VarChar(36)
+  content     String?              @db.Text
+  filePaths   Json                 @map("file_paths")
+  score       Int?
+  feedback    String?              @db.Text
+  status      TaskSubmissionStatus @default(DRAFT)
+  submittedAt DateTime?            @map("submitted_at")
+  reviewedAt  DateTime?            @map("reviewed_at")
+  reviewerId  String?              @map("reviewer_id") @db.VarChar(36)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  reviewer    User?                @relation("TaskReviewer", fields: [reviewerId], references: [id])
+  student     User                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  task        TrainingTask         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, studentId])
+  @@index([status])
+  @@index([studentId])
+  @@index([reviewerId], map: "task_submissions_reviewer_id_fkey")
+  @@map("task_submissions")
+}
+
+model ProjectResource {
+  id           String          @id @default(uuid()) @db.VarChar(36)
+  projectId    String          @map("project_id") @db.VarChar(36)
+  type         ResourceType
+  name         String          @db.VarChar(255)
+  spec         String?         @db.VarChar(500)
+  quantity     String?         @db.VarChar(50)
+  unit         String?         @db.VarChar(20)
+  agendaItem   String?         @map("agenda_item") @db.VarChar(255)
+  budgetAmount BigInt?         @map("budget_amount")
+  actualAmount BigInt?         @map("actual_amount")
+  status       ResourceStatus  @default(PENDING)
+  workOrderId  String?         @map("work_order_id") @db.VarChar(100)
+  responsible  String          @db.VarChar(100)
+  supplier     String?         @db.VarChar(255)
+  uploadTime   DateTime?       @map("upload_time")
+  url          String?         @db.VarChar(500)
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  budgetLines  BudgetLine[]
+  project      TrainingProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, type])
+  @@index([status])
+  @@map("project_resources")
+}
+
+model BudgetLine {
+  id           String           @id @default(uuid()) @db.VarChar(36)
+  projectId    String           @map("project_id") @db.VarChar(36)
+  category     String           @db.VarChar(100)
+  item         String           @db.VarChar(255)
+  resourceId   String?          @map("resource_id") @db.VarChar(36)
+  budgetAmount BigInt           @map("budget_amount")
+  actualAmount BigInt           @default(0) @map("actual_amount")
+  notes        String?          @db.Text
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  project      TrainingProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  resource     ProjectResource? @relation(fields: [resourceId], references: [id])
+
+  @@index([projectId])
+  @@index([category])
+  @@index([resourceId], map: "budget_lines_resource_id_fkey")
+  @@map("budget_lines")
+}
+
+model Meeting {
+  id          String          @id @default(uuid()) @db.VarChar(36)
+  projectId   String          @map("project_id") @db.VarChar(36)
+  stageId     String?         @map("stage_id") @db.VarChar(36)
+  title       String          @db.VarChar(255)
+  description String?         @db.Text
+  meetingType String?         @map("meeting_type") @db.VarChar(50)
+  startTime   DateTime        @map("start_time")
+  endTime     DateTime        @map("end_time")
+  location    String?         @db.VarChar(255)
+  onlineLink  String?         @map("online_link") @db.VarChar(500)
+  externalId  String?         @map("external_id") @db.VarChar(100)
+  status      MeetingStatus   @default(DRAFT)
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  agendaItems AgendaItem[]
+  project     TrainingProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stage       TrainingStage?  @relation(fields: [stageId], references: [id])
+
+  @@index([projectId])
+  @@index([startTime, endTime])
+  @@index([stageId], map: "meetings_stage_id_fkey")
+  @@map("meetings")
+}
+
+model AgendaItem {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  meetingId  String   @map("meeting_id") @db.VarChar(36)
+  type       String   @db.VarChar(50)
+  title      String   @db.VarChar(255)
+  duration   Int
+  speaker    String?  @db.VarChar(100)
+  location   String?  @db.VarChar(255)
+  startTime  String?  @map("start_time") @db.VarChar(10)
+  endTime    String?  @map("end_time") @db.VarChar(10)
+  fixed      Boolean  @default(false)
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  meeting    Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@map("agenda_items")
+}
+
+model ProjectParticipant {
+  id          String            @id @default(uuid()) @db.VarChar(36)
+  projectId   String            @map("project_id") @db.VarChar(36)
+  userId      String            @map("user_id") @db.VarChar(36)
+  role        ParticipantRole
+  status      ParticipantStatus @default(ACTIVE)
+  joinedAt    DateTime          @default(now()) @map("joined_at")
+  completedAt DateTime?         @map("completed_at")
+  notes       String?           @db.Text
+  project     TrainingProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId, role])
+  @@index([userId])
+  @@map("project_participants")
+}
+
+model AttendanceRecord {
+  id         String           @id @default(uuid()) @db.VarChar(36)
+  taskId     String           @map("task_id") @db.VarChar(36)
+  studentId  String           @map("student_id") @db.VarChar(36)
+  type       AttendanceType
+  method     AttendanceMethod
+  location   Json?
+  deviceInfo Json?            @map("device_info")
+  checkTime  DateTime         @default(now()) @map("check_time")
+  status     AttendanceStatus @default(PRESENT)
+  notes      String?          @db.Text
+  createdBy  String?          @map("created_by") @db.VarChar(36)
+  createdAt  DateTime         @default(now()) @map("created_at")
+  creator    User?            @relation("AttendanceCreator", fields: [createdBy], references: [id])
+  student    User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  task       TrainingTask     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, studentId])
+  @@index([checkTime])
+  @@index([status])
+  @@index([createdBy], map: "attendance_records_created_by_fkey")
+  @@index([studentId], map: "attendance_records_student_id_fkey")
+  @@map("attendance_records")
+}
+
+model ObservationRecord {
+  id          String                @id @default(uuid()) @db.VarChar(36)
+  projectId   String                @map("project_id") @db.VarChar(36)
+  studentId   String                @map("student_id") @db.VarChar(36)
+  observerId  String                @map("observer_id") @db.VarChar(36)
+  type        ObservationType
+  title       String                @db.VarChar(255)
+  content     String                @db.Text
+  attachments Json
+  tags        Json
+  score       Int?
+  visibility  ObservationVisibility @default(TEACHER)
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+  observer    User                  @relation("ObserverRecords", fields: [observerId], references: [id], onDelete: Cascade)
+  project     TrainingProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  student     User                  @relation("StudentObservations", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, studentId])
+  @@index([observerId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([studentId], map: "observation_records_student_id_fkey")
+  @@map("observation_records")
+}
+
+model StageTemplate {
+  id            String    @id @default(uuid()) @db.VarChar(36)
+  name          String    @db.VarChar(255)
+  type          StageType
+  description   String?   @db.Text
+  config        Json
+  taskTemplates Json      @map("task_templates")
+  isSystem      Boolean   @default(false) @map("is_system")
+  createdBy     String    @map("created_by") @db.VarChar(36)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  creator       User      @relation(fields: [createdBy], references: [id])
+
+  @@index([type])
+  @@index([createdBy])
+  @@map("stage_templates")
+}
+
+model TaskTemplate {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  name           String   @db.VarChar(255)
+  type           String   @db.VarChar(50)
+  description    String?  @db.Text
+  config         Json
+  required       Boolean  @default(false)
+  estimatedHours Int?     @map("estimated_hours")
+  category       String?  @db.VarChar(100)
+  isSystem       Boolean  @default(false) @map("is_system")
+  createdBy      String   @map("created_by") @db.VarChar(36)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  creator        User     @relation(fields: [createdBy], references: [id])
+
+  @@index([type])
+  @@index([category])
+  @@index([createdBy])
+  @@map("task_templates")
+}
+
+model Notification {
+  id        String               @id @default(uuid()) @db.VarChar(36)
+  userId    String               @map("user_id") @db.VarChar(36)
+  type      NotificationType
+  title     String               @db.VarChar(255)
+  content   String               @db.Text
+  data      Json?
+  channels  Json
+  priority  NotificationPriority @default(NORMAL)
+  readAt    DateTime?            @map("read_at")
+  sentAt    DateTime?            @map("sent_at")
+  createdAt DateTime             @default(now()) @map("created_at")
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([type])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model GrowthProfile {
+  id             String          @id @default(uuid()) @db.VarChar(36)
+  userId         String          @map("user_id") @db.VarChar(36)
+  projectId      String          @map("project_id") @db.VarChar(36)
+  skills         Json
+  achievements   Json
+  learningGoals  Json            @map("learning_goals")
+  progress       Json
+  feedback       Json
+  certifications Json
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  project        TrainingProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@index([userId])
+  @@index([projectId])
+  @@map("growth_profiles")
+}
+
+model SystemIntegration {
+  id           String            @id @default(uuid()) @db.VarChar(36)
+  type         IntegrationType
+  name         String            @db.VarChar(255)
+  config       Json
+  status       IntegrationStatus @default(ACTIVE)
+  lastSync     DateTime?         @map("last_sync")
+  syncStatus   SyncStatus?       @map("sync_status")
+  errorMessage String?           @map("error_message") @db.Text
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  @@index([type])
+  @@index([status])
+  @@index([lastSync])
+  @@map("system_integrations")
+}
+
+model TrainingGroup {
+  id          String          @id @default(uuid()) @db.VarChar(36)
+  name        String          @db.VarChar(255)
+  description String?         @db.Text
+  projectId   String          @map("project_id") @db.VarChar(36)
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  members     GroupMember[]
+  project     TrainingProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("training_groups")
+}
+
+model GroupMember {
+  id         String        @id @default(uuid()) @db.VarChar(36)
+  userId     String        @map("user_id") @db.VarChar(36)
+  groupId    String        @map("group_id") @db.VarChar(36)
+  role       String        @db.VarChar(50)
+  assignedAt DateTime      @default(now()) @map("assigned_at")
+  group      TrainingGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+  @@map("group_members")
+}
+
+model Recommendation {
+  id            String               @id @default(uuid()) @db.VarChar(36)
+  projectId     String               @map("project_id") @db.VarChar(36)
+  studentId     String               @map("student_id") @db.VarChar(36)
+  counselorId   String               @map("counselor_id") @db.VarChar(36)
+  type          RecommendationType
+  status        RecommendationStatus @default(PENDING)
+  leadership    Int                  @default(0)
+  innovation    Int                  @default(0)
+  execution     Int                  @default(0)
+  teamwork      Int                  @default(0)
+  reason        String?              @db.Text
+  reviewerId    String?              @map("reviewer_id") @db.VarChar(36)
+  reviewComment String?              @map("review_comment") @db.Text
+  reviewedAt    DateTime?            @map("reviewed_at")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+  counselor     User                 @relation("RecommendationCounselor", fields: [counselorId], references: [id], onDelete: Cascade)
+  project       TrainingProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reviewer      User?                @relation("RecommendationReviewer", fields: [reviewerId], references: [id])
+  student       User                 @relation("RecommendationStudent", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, studentId, type])
+  @@index([projectId])
+  @@index([counselorId])
+  @@index([status])
+  @@index([type])
+  @@index([reviewerId], map: "recommendations_reviewer_id_fkey")
+  @@index([studentId], map: "recommendations_student_id_fkey")
+  @@map("recommendations")
+}
+
+model StudentPerformance {
+  id              String          @id @default(uuid()) @db.VarChar(36)
+  projectId       String          @map("project_id") @db.VarChar(36)
+  studentId       String          @map("student_id") @db.VarChar(36)
+  rank            Int             @default(0)
+  attendance      Int             @default(0)
+  taskCompletion  Int             @default(0)
+  role            String?         @db.VarChar(100)
+  observationTags Json
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  project         TrainingProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  student         User            @relation("StudentPerformance", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, studentId])
+  @@index([projectId])
+  @@index([studentId])
+  @@map("student_performances")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model growth_achievements {
+  id                   String                               @id @default(dbgenerated("(uuid())")) @db.VarChar(36)
+  profile_id           String                               @db.VarChar(36)
+  achievement_type     growth_achievements_achievement_type
+  title                String                               @db.VarChar(255)
+  description          String?                              @db.Text
+  achievement_date     DateTime                             @db.Date
+  source               growth_achievements_source
+  source_id            String?                              @db.VarChar(36)
+  level                growth_achievements_level
+  verified             Boolean?                             @default(false)
+  verifier_id          String?                              @db.VarChar(36)
+  verifier_name        String?                              @db.VarChar(100)
+  skill_impact         Json?                                @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  career_impact        String?                              @db.Text
+  visible              Boolean?                             @default(true)
+  featured             Boolean?                             @default(false)
+  certificate_url      String?                              @db.VarChar(500)
+  badge_url            String?                              @db.VarChar(500)
+  created_at           DateTime?                            @default(now()) @db.Timestamp(0)
+  user_growth_profiles user_growth_profiles                 @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "growth_achievements_ibfk_1")
+  users                User?                                @relation(fields: [verifier_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "growth_achievements_ibfk_2")
+
+  @@index([achievement_date(sort: Desc)], map: "idx_date")
+  @@index([featured, visible], map: "idx_featured")
+  @@index([level], map: "idx_level")
+  @@index([profile_id, achievement_type], map: "idx_profile_type")
+  @@index([verifier_id], map: "verifier_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model growth_feedback {
+  id                   String                        @id @default(dbgenerated("(uuid())")) @db.VarChar(36)
+  profile_id           String                        @db.VarChar(36)
+  feedback_type        growth_feedback_feedback_type
+  title                String                        @db.VarChar(255)
+  content              String                        @db.Text
+  provider_id          String?                       @db.VarChar(36)
+  provider_name        String                        @db.VarChar(100)
+  provider_role        String?                       @db.VarChar(50)
+  rating               Int?
+  categories           Json?                         @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  tags                 Json?                         @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  related_project_id   String?                       @db.VarChar(36)
+  related_event_id     String?                       @db.VarChar(36)
+  visibility           growth_feedback_visibility?   @default(shared)
+  status               growth_feedback_status?       @default(submitted)
+  acknowledged_at      DateTime?                     @db.Timestamp(0)
+  feedback_date        DateTime                      @db.Date
+  created_at           DateTime?                     @default(now()) @db.Timestamp(0)
+  user_growth_profiles user_growth_profiles          @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "growth_feedback_ibfk_1")
+  users                User?                         @relation(fields: [provider_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "growth_feedback_ibfk_2")
+
+  @@index([feedback_date(sort: Desc)], map: "idx_date")
+  @@index([profile_id, feedback_type], map: "idx_profile_type")
+  @@index([provider_id], map: "idx_provider")
+  @@index([rating], map: "idx_rating")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model growth_goals {
+  id                   String                            @id @default(dbgenerated("(uuid())")) @db.VarChar(36)
+  profile_id           String                            @db.VarChar(36)
+  title                String                            @db.VarChar(255)
+  description          String?                           @db.Text
+  category             growth_goals_category
+  start_date           DateTime                          @db.Date
+  target_date          DateTime                          @db.Date
+  completed_date       DateTime?                         @db.Date
+  status               growth_goals_status?              @default(draft)
+  progress             Int?                              @default(0)
+  metrics              Json?                             @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  action_plan          Json?                             @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  milestones           Json?                             @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  support_resources    Json?                             @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  mentor_id            String?                           @db.VarChar(36)
+  mentor_name          String?                           @db.VarChar(100)
+  mentor_support_type  growth_goals_mentor_support_type?
+  created_at           DateTime?                         @default(now()) @db.Timestamp(0)
+  updated_at           DateTime?                         @default(now()) @db.Timestamp(0)
+  user_growth_profiles user_growth_profiles              @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "growth_goals_ibfk_1")
+  users                User?                             @relation(fields: [mentor_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "growth_goals_ibfk_2")
+
+  @@index([category], map: "idx_category")
+  @@index([profile_id, status], map: "idx_profile_status")
+  @@index([progress], map: "idx_progress")
+  @@index([target_date], map: "idx_target_date")
+  @@index([mentor_id], map: "mentor_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model growth_mentorship_history {
+  id                                                String                                @id @default(dbgenerated("(uuid())")) @db.VarChar(36)
+  profile_id                                        String                                @db.VarChar(36)
+  project_id                                        String?                               @db.VarChar(36)
+  project_name                                      String                                @db.VarChar(255)
+  role                                              growth_mentorship_history_role
+  mentor_id                                         String                                @db.VarChar(36)
+  mentor_name                                       String                                @db.VarChar(100)
+  student_id                                        String                                @db.VarChar(36)
+  student_name                                      String                                @db.VarChar(100)
+  start_date                                        DateTime                              @db.Date
+  end_date                                          DateTime?                             @db.Date
+  status                                            growth_mentorship_history_status
+  overall_rating                                    Int?
+  source_type                                       growth_mentorship_history_source_type
+  source_project_id                                 String?                               @db.VarChar(36)
+  completed_milestones                              Json?                                 @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  skills_improved                                   Json?                                 @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  growth_areas                                      Json?                                 @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  mentor_to_student_feedback                        String?                               @db.Text
+  student_to_mentor_feedback                        String?                               @db.Text
+  created_at                                        DateTime?                             @default(now()) @db.Timestamp(0)
+  updated_at                                        DateTime?                             @default(now()) @db.Timestamp(0)
+  user_growth_profiles                              user_growth_profiles                  @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "growth_mentorship_history_ibfk_1")
+  training_projects                                 TrainingProject?                      @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "growth_mentorship_history_ibfk_2")
+  users_growth_mentorship_history_mentor_idTousers  User                                  @relation("growth_mentorship_history_mentor_idTousers", fields: [mentor_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "growth_mentorship_history_ibfk_3")
+  users_growth_mentorship_history_student_idTousers User                                  @relation("growth_mentorship_history_student_idTousers", fields: [student_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "growth_mentorship_history_ibfk_4")
+
+  @@index([end_date(sort: Desc)], map: "idx_completion_date")
+  @@index([mentor_id, student_id], map: "idx_mentor_student")
+  @@index([profile_id, role], map: "idx_profile_role")
+  @@index([status], map: "idx_status")
+  @@index([project_id], map: "project_id")
+  @@index([student_id], map: "student_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model growth_skills {
+  id                   String                       @id @default(dbgenerated("(uuid())")) @db.VarChar(36)
+  profile_id           String                       @db.VarChar(36)
+  skill_name           String                       @db.VarChar(100)
+  skill_category       growth_skills_skill_category
+  current_level        Int                          @default(1)
+  target_level         Int?
+  max_level            Int?                         @default(5)
+  priority             growth_skills_priority?      @default(medium)
+  last_assessed        DateTime?                    @db.Date
+  next_assessment      DateTime?                    @db.Date
+  progress_history     Json?                        @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  learning_path        Json?                        @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  validations          Json?                        @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  created_at           DateTime?                    @default(now()) @db.Timestamp(0)
+  updated_at           DateTime?                    @default(now()) @db.Timestamp(0)
+  user_growth_profiles user_growth_profiles         @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "growth_skills_ibfk_1")
+
+  @@index([current_level, target_level], map: "idx_level")
+  @@index([priority], map: "idx_priority")
+  @@index([profile_id, skill_category], map: "idx_profile_category")
+  @@index([skill_name], map: "idx_skill_name")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model growth_timeline_events {
+  id                   String                                       @id @default(dbgenerated("(uuid())")) @db.VarChar(36)
+  profile_id           String                                       @db.VarChar(36)
+  event_date           DateTime                                     @db.Date
+  type                 growth_timeline_events_type
+  category             growth_timeline_events_category
+  title                String                                       @db.VarChar(255)
+  description          String?                                      @db.Text
+  related_project_id   String?                                      @db.VarChar(36)
+  related_project_type growth_timeline_events_related_project_type?
+  importance           growth_timeline_events_importance?           @default(medium)
+  tags                 Json?                                        @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  attachments          Json?                                        @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  rating               Int?
+  created_at           DateTime?                                    @default(now()) @db.Timestamp(0)
+  user_growth_profiles user_growth_profiles                         @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "growth_timeline_events_ibfk_1")
+
+  @@index([importance], map: "idx_importance")
+  @@index([profile_id, event_date(sort: Desc)], map: "idx_profile_date")
+  @@index([type, category], map: "idx_type_category")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model growth_training_history {
+  id                      String                               @id @default(dbgenerated("(uuid())")) @db.VarChar(36)
+  profile_id              String                               @db.VarChar(36)
+  project_id              String                               @db.VarChar(36)
+  project_name            String                               @db.VarChar(255)
+  project_type            growth_training_history_project_type
+  start_date              DateTime                             @db.Date
+  end_date                DateTime?                            @db.Date
+  status                  growth_training_history_status
+  final_score             Int?
+  completion_rate         Decimal?                             @db.Decimal(5, 2)
+  certifications_obtained Json?                                @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  skills_learned          Json?                                @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  instructor_feedback     String?                              @db.Text
+  self_reflection         String?                              @db.Text
+  had_mentorship          Boolean?                             @default(false)
+  mentor_name             String?                              @db.VarChar(100)
+  mentorship_feedback     String?                              @db.Text
+  impact_areas            Json?                                @default(dbgenerated("(_utf8mb4\\'[]\\')"))
+  created_at              DateTime?                            @default(now()) @db.Timestamp(0)
+  updated_at              DateTime?                            @default(now()) @db.Timestamp(0)
+  user_growth_profiles    user_growth_profiles                 @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "growth_training_history_ibfk_1")
+  training_projects       TrainingProject                      @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "growth_training_history_ibfk_2")
+
+  @@index([end_date(sort: Desc)], map: "idx_completion_date")
+  @@index([profile_id, status], map: "idx_profile_status")
+  @@index([project_type], map: "idx_project_type")
+  @@index([project_id], map: "project_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_growth_profiles {
+  id                          String                              @id @default(dbgenerated("(uuid())")) @db.VarChar(36)
+  user_id                     String                              @unique(map: "user_id") @db.VarChar(36)
+  user_name                   String                              @db.VarChar(100)
+  department                  String?                             @db.VarChar(100)
+  position                    String?                             @db.VarChar(100)
+  entry_date                  DateTime?                           @db.Date
+  current_level               user_growth_profiles_current_level? @default(junior)
+  total_training_projects     Int?                                @default(0)
+  completed_training_projects Int?                                @default(0)
+  total_mentorship_projects   Int?                                @default(0)
+  total_achievements          Int?                                @default(0)
+  total_skills                Int?                                @default(0)
+  total_goals                 Int?                                @default(0)
+  average_rating              Decimal?                            @default(0.00) @db.Decimal(3, 2)
+  statistics                  Json?                               @default(dbgenerated("(_utf8mb4\\'{}\\')"))
+  profile_config              Json?                               @default(dbgenerated("(_utf8mb4\\'{}\\')"))
+  last_updated                DateTime?                           @default(now()) @db.Timestamp(0)
+  created_at                  DateTime?                           @default(now()) @db.Timestamp(0)
+  growth_achievements         growth_achievements[]
+  growth_feedback             growth_feedback[]
+  growth_goals                growth_goals[]
+  growth_mentorship_history   growth_mentorship_history[]
+  growth_skills               growth_skills[]
+  growth_timeline_events      growth_timeline_events[]
+  growth_training_history     growth_training_history[]
+  users                       User                                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "user_growth_profiles_ibfk_1")
+
+  @@index([department], map: "idx_department")
+  @@index([current_level], map: "idx_level")
+  @@index([position], map: "idx_position")
+  @@index([last_updated], map: "idx_updated")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum RoleName {
+  admin
+  teacher
+  counselor
+  student
+  observer
+}
+
+enum RoleStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum ProjectStatus {
+  DRAFT
+  PLANNING
+  APPROVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum StageType {
+  BEFORE
+  DURING
+  AFTER
+}
+
+enum StageStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+  CANCELLED
+  ACTIVE
+}
+
+enum ReviewerRole {
+  COUNSELOR
+  TEACHER
+  ADMIN
+}
+
+enum TaskSubmissionStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+}
+
+enum CollaborationStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum ResourceType {
+  DIGITAL
+  SERVICE
+  SUPPLY
+}
+
+enum ResourceStatus {
+  PENDING
+  UPLOADED
+  REQUESTED
+  CONFIRMED
+  ORDERED
+  STOCKED
+  DISTRIBUTED
+  CANCELLED
+  ACTIVE
+  INACTIVE
+  DEPRECATED
+  UNDER_REVIEW
+}
+
+enum MeetingStatus {
+  DRAFT
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum ParticipantRole {
+  OWNER
+  TEACHER
+  COUNSELOR
+  STUDENT
+  OBSERVER
+}
+
+enum ParticipantStatus {
+  ACTIVE
+  INACTIVE
+  COMPLETED
+  DROPPED
+}
+
+enum AttendanceType {
+  CHECK_IN
+  CHECK_OUT
+}
+
+enum AttendanceMethod {
+  QR_CODE
+  LOCATION
+  FACE
+  MANUAL
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  LEAVE
+}
+
+enum ObservationType {
+  DAILY
+  WEEKLY
+  MILESTONE
+  SPECIAL
+}
+
+enum ObservationVisibility {
+  PRIVATE
+  TEACHER
+  PUBLIC
+}
+
+enum NotificationType {
+  SYSTEM
+  PROJECT
+  TASK
+  OBSERVATION
+  MEETING
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum IntegrationType {
+  HR
+  WECHAT
+  CALENDAR
+  EMAIL
+  SMS
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}
+
+enum SyncStatus {
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+enum RecommendationType {
+  YULIN
+  JINYI
+}
+
+enum RecommendationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum growth_achievements_achievement_type {
+  milestone
+  certification
+  recognition
+  project_completion
+  skill_mastery
+}
+
+enum growth_feedback_feedback_type {
+  mentor
+  peer
+  manager
+  instructor
+  self
+  review     @map("360_review")
+}
+
+enum growth_skills_skill_category {
+  technical
+  soft
+  leadership
+  domain
+}
+
+enum growth_timeline_events_type {
+  training
+  mentorship
+  achievement
+  milestone
+  feedback
+  goal
+  assessment
+}
+
+enum growth_goals_category {
+  skill
+  career
+  leadership
+  knowledge
+  network
+}
+
+enum growth_mentorship_history_role {
+  student
+  mentor
+}
+
+enum growth_timeline_events_category {
+  learning
+  development
+  recognition
+  relationship
+  skill
+  career
+}
+
+enum growth_training_history_project_type {
+  onboarding
+  skills
+  leadership
+  certification
+  custom
+}
+
+enum growth_achievements_source {
+  training
+  mentorship
+  work
+  external
+}
+
+enum user_growth_profiles_current_level {
+  junior
+  intermediate
+  senior
+  expert
+}
+
+enum growth_skills_priority {
+  low
+  medium
+  high
+}
+
+enum growth_training_history_status {
+  enrolled
+  active
+  completed
+  dropped
+  suspended
+}
+
+enum growth_achievements_level {
+  bronze
+  silver
+  gold
+  platinum
+}
+
+enum growth_goals_status {
+  draft
+  active
+  completed
+  cancelled
+  overdue
+}
+
+enum growth_timeline_events_related_project_type {
+  training
+  mentorship
+}
+
+enum growth_timeline_events_importance {
+  low
+  medium
+  high
+  critical
+}
+
+enum growth_mentorship_history_status {
+  active
+  completed
+  paused
+  cancelled
+}
+
+enum growth_feedback_visibility {
+  private
+  shared
+  public
+}
+
+enum growth_mentorship_history_source_type {
+  training_project
+  direct_mentorship
+  skill_development
+}
+
+enum growth_feedback_status {
+  draft
+  submitted
+  acknowledged
+}
+
+enum growth_goals_mentor_support_type {
+  guidance
+  review
+  coaching
+}
+
+enum ProposalStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ApprovalStepStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SKIPPED
+}
+
+// =====================================================
+// 带教管理系统核心表结构
+// =====================================================
+
+// 带教项目主表（聚合根）
+model MentorshipProject {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  // 基本信息
+  title       String                @db.VarChar(255)
+  description String?               @db.Text
+  projectType MentorshipProjectType @default(TRAINING_BASED) @map("project_type")
+  status      MentorshipStatus      @default(DRAFT)
+
+  // 关联培训项目
+  sourceTrainingProjectId   String? @map("source_training_project_id") @db.VarChar(36)
+  sourceTrainingProjectName String? @map("source_training_project_name") @db.VarChar(255)
+  autoCreated               Boolean @default(false) @map("auto_created")
+
+  // 师徒信息
+  mentorId    String @map("mentor_id") @db.VarChar(36)
+  mentorName  String @map("mentor_name") @db.VarChar(100)
+  studentId   String @map("student_id") @db.VarChar(36)
+  studentName String @map("student_name") @db.VarChar(100)
+
+  // 时间管理
+  plannedDuration Int       @map("planned_duration")
+  actualDuration  Int?      @map("actual_duration")
+  startDate       DateTime  @map("start_date") @db.Date
+  plannedEndDate  DateTime  @map("planned_end_date") @db.Date
+  actualEndDate   DateTime? @map("actual_end_date") @db.Date
+
+  // 进度信息
+  progress        Int @default(0)
+  completedPhases Int @default(0) @map("completed_phases")
+  totalPhases     Int @default(0) @map("total_phases")
+
+  // 评价信息
+  mentorRating         Decimal? @map("mentor_rating") @db.Decimal(3, 2)
+  studentRating        Decimal? @map("student_rating") @db.Decimal(3, 2)
+  overallEffectiveness Decimal? @map("overall_effectiveness") @db.Decimal(3, 2)
+
+  // 扩展数据（JSON存储复杂配置）
+  objectives      Json @default("[]")
+  successCriteria Json @default("[]") @map("success_criteria")
+  customConfig    Json @default("{}") @map("custom_config")
+
+  // 审计字段
+  createdBy  String    @map("created_by") @db.VarChar(36)
+  approvedBy String?   @map("approved_by") @db.VarChar(36)
+  approvedAt DateTime? @map("approved_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  // 关联关系
+  sourceTrainingProject TrainingProject? @relation("MentorshipSourceProject", fields: [sourceTrainingProjectId], references: [id])
+  mentor                User             @relation("MentorshipMentor", fields: [mentorId], references: [id])
+  student               User             @relation("MentorshipStudent", fields: [studentId], references: [id])
+  creator               User             @relation("MentorshipCreator", fields: [createdBy], references: [id])
+  approver              User?            @relation("MentorshipApprover", fields: [approvedBy], references: [id])
+
+  // 子表关联
+  relationships MentorshipRelationship[]
+  phases        MentorshipPhase[]
+  tasks         MentorshipTask[]
+  interactions  MentorshipInteraction[]
+  evaluations   MentorshipEvaluation[]
+  plans         MentorshipPlan[]
+
+  @@index([mentorId, status], map: "idx_mentor_status")
+  @@index([studentId, status], map: "idx_student_status")
+  @@index([sourceTrainingProjectId], map: "idx_source_project")
+  @@index([startDate, plannedEndDate], map: "idx_dates")
+  @@index([createdAt], map: "idx_created_at")
+  @@map("mentorship_projects")
+}
+
+// 师徒关系表
+model MentorshipRelationship {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  // 关联项目
+  projectId   String                      @map("project_id") @db.VarChar(36)
+  projectType MentorshipProjectSourceType @default(TRAINING_PROJECT) @map("project_type")
+  
+  // 阶段关联（可选，用于阶段指派模式）
+  phaseId String? @map("phase_id") @db.VarChar(36)
+
+  // 师徒信息
+  mentorId   String     @map("mentor_id") @db.VarChar(36)
+  mentorName String     @map("mentor_name") @db.VarChar(100)
+  mentorType MentorType @map("mentor_type")
+
+  studentId   String @map("student_id") @db.VarChar(36)
+  studentName String @map("student_name") @db.VarChar(100)
+
+  // 关系属性
+  relationshipType RelationshipType @default(ONE_TO_ONE) @map("relationship_type")
+  scope            MentorshipScope  @map("scope")
+
+  // 匹配信息
+  matchingScore    Decimal?     @map("matching_score") @db.Decimal(3, 2)
+  matchingType     MatchingType @map("matching_type")
+  matchingReasons  Json         @default("[]") @map("matching_reasons")
+  matchingCriteria Json         @default("{}") @map("matching_criteria")
+
+  // 时间管理
+  establishedDate     DateTime  @map("established_date") @db.Date
+  expectedDuration    Int       @map("expected_duration")
+  actualDuration      Int?      @map("actual_duration")
+  lastInteractionDate DateTime? @map("last_interaction_date") @db.Date
+
+  // 关系状态
+  status            RelationshipStatus @default(ACTIVE)
+  terminationReason String?            @map("termination_reason") @db.Text
+  terminationDate   DateTime?          @map("termination_date") @db.Date
+
+  // 进度统计
+  totalInteractions   Int @default(0) @map("total_interactions")
+  completedMilestones Int @default(0) @map("completed_milestones")
+  totalMilestones     Int @default(0) @map("total_milestones")
+
+  // 评价信息
+  mutualSatisfaction  Decimal? @map("mutual_satisfaction") @db.Decimal(3, 2)
+  effectivenessRating Decimal? @map("effectiveness_rating") @db.Decimal(3, 2)
+
+  // 审计字段
+  createdBy String   @map("created_by") @db.VarChar(36)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  project MentorshipProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  mentor  User              @relation("RelationshipMentor", fields: [mentorId], references: [id])
+  student User              @relation("RelationshipStudent", fields: [studentId], references: [id])
+  creator User              @relation("RelationshipCreator", fields: [createdBy], references: [id])
+
+  // 子表关联
+  interactions   MentorshipInteraction[]
+  evaluations    MentorshipEvaluation[]
+  MentorshipPlan MentorshipPlan[]
+
+  @@unique([projectId, mentorId, studentId], name: "uk_project_mentor_student")
+  @@index([mentorId, status], map: "idx_mentor_active")
+  @@index([studentId, status], map: "idx_student_active")
+  @@index([status, establishedDate], map: "idx_status_date")
+  @@index([matchingType], map: "idx_matching_type")
+  @@map("mentorship_relationships")
+}
+
+// 带教阶段表
+model MentorshipPhase {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  // 关联项目
+  projectId String @map("project_id") @db.VarChar(36)
+
+  // 阶段基本信息
+  name        String  @db.VarChar(255)
+  description String? @db.Text
+  phaseNumber Int     @map("phase_number")
+
+  // 时间安排
+  plannedDuration Int       @map("planned_duration")
+  actualDuration  Int?      @map("actual_duration")
+  startDate       DateTime? @map("start_date") @db.Date
+  endDate         DateTime? @map("end_date") @db.Date
+
+  // 阶段内容
+  objectives       Json @default("[]")
+  expectedOutcomes Json @default("[]") @map("expected_outcomes")
+  keyActivities    Json @default("[]") @map("key_activities")
+  successCriteria  Json @default("[]") @map("success_criteria")
+
+  // 进度状态
+  status         PhaseStatus @default(PENDING)
+  progress       Int         @default(0)
+  completionRate Decimal     @default(0.00) @map("completion_rate") @db.Decimal(5, 2)
+
+  // 评价信息
+  phaseRating     Decimal? @map("phase_rating") @db.Decimal(3, 2)
+  mentorFeedback  String?  @map("mentor_feedback") @db.Text
+  studentFeedback String?  @map("student_feedback") @db.Text
+
+  // 任务统计
+  totalTasks     Int @default(0) @map("total_tasks")
+  completedTasks Int @default(0) @map("completed_tasks")
+
+  // 审计字段
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  completedAt DateTime? @map("completed_at")
+
+  // 关联关系
+  project MentorshipProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // 子表关联
+  tasks                MentorshipTask[]
+  MentorshipEvaluation MentorshipEvaluation[]
+
+  @@index([projectId, phaseNumber], map: "idx_project_phase")
+  @@index([status], map: "idx_status")
+  @@index([startDate, endDate], map: "idx_dates")
+  @@map("mentorship_phases")
+}
+
+// 带教任务表
+model MentorshipTask {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  // 关联信息
+  projectId String  @map("project_id") @db.VarChar(36)
+  phaseId   String? @map("phase_id") @db.VarChar(36)
+
+  // 任务基本信息
+  title       String       @db.VarChar(255)
+  description String?      @db.Text
+  taskType    TaskType     @map("task_type")
+  priority    TaskPriority @default(MEDIUM)
+
+  // 时间安排
+  estimatedHours Int?      @map("estimated_hours")
+  actualHours    Int?      @map("actual_hours")
+  dueDate        DateTime? @map("due_date") @db.Date
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+
+  // 任务状态
+  status   TaskStatus @default(PENDING)
+  progress Int        @default(0)
+
+  // 任务配置
+  requirements       Json @default("[]")
+  deliverables       Json @default("[]")
+  resources          Json @default("[]")
+  evaluationCriteria Json @default("[]") @map("evaluation_criteria")
+
+  // 角色分工
+  assignedTo              AssignedTo @default(STUDENT) @map("assigned_to")
+  mentorResponsibilities  String?    @map("mentor_responsibilities") @db.Text
+  studentResponsibilities String?    @map("student_responsibilities") @db.Text
+
+  // 评价信息
+  taskRating     Decimal? @map("task_rating") @db.Decimal(3, 2)
+  feedback       String?  @db.Text
+  lessonsLearned String?  @map("lessons_learned") @db.Text
+
+  // 关联信息
+  relatedTrainingTaskId String? @map("related_training_task_id") @db.VarChar(36)
+  predecessorTaskIds    Json    @default("[]") @map("predecessor_task_ids")
+
+  // 审计字段
+  createdBy String   @map("created_by") @db.VarChar(36)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  project MentorshipProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase   MentorshipPhase?  @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  creator User              @relation("TaskCreator", fields: [createdBy], references: [id])
+
+  @@index([projectId, status], map: "idx_project_status")
+  @@index([phaseId, taskType], map: "idx_phase_task")
+  @@index([assignedTo, status], map: "idx_assigned_to")
+  @@index([dueDate], map: "idx_due_date")
+  @@index([priority, status], map: "idx_priority")
+  @@map("mentorship_tasks")
+}
+
+// 师徒交互记录表
+model MentorshipInteraction {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  // 关联信息
+  relationshipId String @map("relationship_id") @db.VarChar(36)
+  projectId      String @map("project_id") @db.VarChar(36)
+
+  // 交互基本信息
+  interactionType InteractionType @map("interaction_type")
+  title           String          @db.VarChar(255)
+  description     String?         @db.Text
+
+  // 时间信息
+  interactionDate DateTime @map("interaction_date") @db.Date
+  startTime       String?  @map("start_time") @db.VarChar(8)
+  endTime         String?  @map("end_time") @db.VarChar(8)
+  duration        Int? // 持续时间（分钟）
+
+  // 地点和方式
+  location String?           @db.VarChar(255)
+  method   InteractionMethod
+
+  // 参与者
+  participants Json      @default("[]")
+  initiator    Initiator
+
+  // 交互内容
+  topics      Json   @default("[]")
+  content     String @db.Text
+  actionItems Json   @default("[]") @map("action_items")
+
+  // 附件和资源
+  attachments     Json @default("[]")
+  sharedResources Json @default("[]") @map("shared_resources")
+
+  // 评价信息
+  effectivenessRating Decimal? @map("effectiveness_rating") @db.Decimal(3, 2)
+  mentorSatisfaction  Decimal? @map("mentor_satisfaction") @db.Decimal(3, 2)
+  studentSatisfaction Decimal? @map("student_satisfaction") @db.Decimal(3, 2)
+
+  // 跟进计划
+  followUpNeeded         Boolean   @default(false) @map("follow_up_needed")
+  nextInteractionPlanned DateTime? @map("next_interaction_planned") @db.Date
+  followUpNotes          String?   @map("follow_up_notes") @db.Text
+
+  // 审计字段
+  recordedBy String    @map("recorded_by") @db.VarChar(36)
+  verifiedBy String?   @map("verified_by") @db.VarChar(36)
+  verifiedAt DateTime? @map("verified_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  // 关联关系
+  relationship MentorshipRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  project      MentorshipProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  recorder     User                   @relation("InteractionRecorder", fields: [recordedBy], references: [id])
+  verifier     User?                  @relation("InteractionVerifier", fields: [verifiedBy], references: [id])
+
+  @@index([relationshipId, interactionDate], map: "idx_relationship_date")
+  @@index([projectId, interactionType], map: "idx_project_type")
+  @@index([interactionDate, startTime], map: "idx_date_range")
+  @@index([method, interactionType], map: "idx_method_type")
+  @@map("mentorship_interactions")
+}
+
+// 带教评价表
+model MentorshipEvaluation {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  // 关联信息
+  projectId      String  @map("project_id") @db.VarChar(36)
+  relationshipId String  @map("relationship_id") @db.VarChar(36)
+  phaseId        String? @map("phase_id") @db.VarChar(36)
+
+  // 评价基本信息
+  evaluationType   EvaluationType @map("evaluation_type")
+  evaluationTitle  String         @map("evaluation_title") @db.VarChar(255)
+  evaluationPeriod String?        @map("evaluation_period") @db.VarChar(100)
+
+  // 评价者信息
+  evaluatorId   String        @map("evaluator_id") @db.VarChar(36)
+  evaluatorType EvaluatorType @map("evaluator_type")
+  evaluatorName String        @map("evaluator_name") @db.VarChar(100)
+
+  // 被评价者信息
+  evaluateeId   String        @map("evaluatee_id") @db.VarChar(36)
+  evaluateeType EvaluateeType @map("evaluatee_type")
+  evaluateeName String        @map("evaluatee_name") @db.VarChar(100)
+
+  // 评价维度和分数
+  technicalSkillsScore  Decimal? @map("technical_skills_score") @db.Decimal(3, 2)
+  communicationScore    Decimal? @map("communication_score") @db.Decimal(3, 2)
+  learningAttitudeScore Decimal? @map("learning_attitude_score") @db.Decimal(3, 2)
+  problemSolvingScore   Decimal? @map("problem_solving_score") @db.Decimal(3, 2)
+  collaborationScore    Decimal? @map("collaboration_score") @db.Decimal(3, 2)
+  overallScore          Decimal  @map("overall_score") @db.Decimal(3, 2)
+
+  // 自定义评价维度
+  customCriteria Json @default("{}") @map("custom_criteria")
+
+  // 定性评价
+  strengths        String? @db.Text
+  improvementAreas String? @map("improvement_areas") @db.Text
+  specificFeedback String  @map("specific_feedback") @db.Text
+  suggestions      String? @db.Text
+
+  // 进展评估
+  goalAchievement     Json    @default("{}") @map("goal_achievement")
+  progressAssessment  String? @map("progress_assessment") @db.Text
+  milestoneCompletion Json    @default("[]") @map("milestone_completion")
+
+  // 下阶段规划
+  nextPhaseGoals     Json @default("[]") @map("next_phase_goals")
+  recommendedActions Json @default("[]") @map("recommended_actions")
+  focusAreas         Json @default("[]") @map("focus_areas")
+
+  // 评价状态
+  status      EvaluationStatus     @default(DRAFT)
+  isAnonymous Boolean              @default(false) @map("is_anonymous")
+  visibility  EvaluationVisibility @default(SHARED)
+
+  // 时间信息
+  evaluationDate DateTime  @map("evaluation_date") @db.Date
+  submittedAt    DateTime? @map("submitted_at")
+  reviewedAt     DateTime? @map("reviewed_at")
+  finalizedAt    DateTime? @map("finalized_at")
+
+  // 审计字段
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  project      MentorshipProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  relationship MentorshipRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  phase        MentorshipPhase?       @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  evaluator    User                   @relation("EvaluationEvaluator", fields: [evaluatorId], references: [id])
+  evaluatee    User                   @relation("EvaluationEvaluatee", fields: [evaluateeId], references: [id])
+
+  @@index([projectId, evaluationType], map: "idx_project_type")
+  @@index([relationshipId, evaluationDate], map: "idx_relationship_date")
+  @@index([evaluatorId, evaluatorType], map: "idx_evaluator")
+  @@index([evaluateeId, evaluateeType], map: "idx_evaluatee")
+  @@index([status, submittedAt], map: "idx_status")
+  @@map("mentorship_evaluations")
+}
+
+// 带教计划表
+model MentorshipPlan {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  // 关联信息
+  projectId      String @map("project_id") @db.VarChar(36)
+  relationshipId String @map("relationship_id") @db.VarChar(36)
+
+  // 计划基本信息
+  planTitle       String  @map("plan_title") @db.VarChar(255)
+  planDescription String? @map("plan_description") @db.Text
+  planVersion     String  @default("v1.0") @map("plan_version") @db.VarChar(50)
+
+  // 计划目标
+  overallGoal        String @map("overall_goal") @db.Text
+  specificObjectives Json   @default("[]") @map("specific_objectives")
+  successMetrics     Json   @default("[]") @map("success_metrics")
+  expectedOutcomes   Json   @default("[]") @map("expected_outcomes")
+
+  // 时间规划
+  totalDuration    Int       @map("total_duration")
+  plannedStartDate DateTime  @map("planned_start_date") @db.Date
+  plannedEndDate   DateTime  @map("planned_end_date") @db.Date
+  actualStartDate  DateTime? @map("actual_start_date") @db.Date
+  actualEndDate    DateTime? @map("actual_end_date") @db.Date
+
+  // 阶段规划
+  phasePlanning     Json @default("[]") @map("phase_planning")
+  milestonePlanning Json @default("[]") @map("milestone_planning")
+
+  // 学习内容规划
+  learningTopics        Json @default("[]") @map("learning_topics")
+  skillDevelopmentAreas Json @default("[]") @map("skill_development_areas")
+  knowledgeRequirements Json @default("[]") @map("knowledge_requirements")
+
+  // 方法和资源
+  teachingMethods      Json @default("[]") @map("teaching_methods")
+  learningActivities   Json @default("[]") @map("learning_activities")
+  requiredResources    Json @default("[]") @map("required_resources")
+  recommendedMaterials Json @default("[]") @map("recommended_materials")
+
+  // 评估规划
+  assessmentSchedule Json @default("[]") @map("assessment_schedule")
+  evaluationCriteria Json @default("[]") @map("evaluation_criteria")
+  feedbackMechanisms Json @default("[]") @map("feedback_mechanisms")
+
+  // 沟通规划
+  communicationSchedule         Json    @default("[]") @map("communication_schedule")
+  meetingFrequency              String? @map("meeting_frequency") @db.VarChar(100)
+  preferredCommunicationMethods Json    @default("[]") @map("preferred_communication_methods")
+
+  // 计划状态
+  status         PlanStatus     @default(DRAFT)
+  approvalStatus ApprovalStatus @default(PENDING) @map("approval_status")
+
+  // 进度跟踪
+  completionRate Decimal @default(0.00) @map("completion_rate") @db.Decimal(5, 2)
+  currentPhase   Int     @default(1) @map("current_phase")
+
+  // 变更管理
+  revisionHistory Json @default("[]") @map("revision_history")
+  changeReasons   Json @default("[]") @map("change_reasons")
+
+  // 审批信息
+  createdBy  String    @map("created_by") @db.VarChar(36)
+  approvedBy String?   @map("approved_by") @db.VarChar(36)
+  approvedAt DateTime? @map("approved_at")
+
+  // 审计字段
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  project      MentorshipProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  relationship MentorshipRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  creator      User                   @relation("PlanCreator", fields: [createdBy], references: [id])
+  approver     User?                  @relation("PlanApprover", fields: [approvedBy], references: [id])
+
+  @@index([projectId, status], map: "idx_project_status")
+  @@index([relationshipId], map: "idx_relationship")
+  @@index([approvalStatus, approvedAt], map: "idx_approval")
+  @@index([plannedStartDate, plannedEndDate], map: "idx_dates")
+  @@map("mentorship_plans")
+}
+
+// 带教资源表
+model MentorshipResource {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  // 资源基本信息
+  title        String           @db.VarChar(255)
+  description  String?          @db.Text
+  resourceType ResourceTypeEnum @map("resource_type")
+  category     String           @db.VarChar(100)
+
+  // 访问控制
+  accessLevel AccessLevel        @default(PUBLIC) @map("access_level")
+  visibility  ResourceVisibility @default(PUBLIC)
+
+  // 资源内容
+  url      String? @db.VarChar(500)
+  filePath String? @map("file_path") @db.VarChar(500)
+  content  String? @db.Text
+  metadata Json    @default("{}")
+
+  // 标签和分类
+  tags           Json @default("[]")
+  skills         Json @default("[]")
+  targetAudience Json @default("[]") @map("target_audience")
+
+  // 质量评价
+  rating        Decimal? @db.Decimal(3, 2)
+  reviewCount   Int      @default(0) @map("review_count")
+  downloadCount Int      @default(0) @map("download_count")
+  viewCount     Int      @default(0) @map("view_count")
+
+  // 状态管理
+  status        ResourceStatus @default(ACTIVE)
+  isRecommended Boolean        @default(false) @map("is_recommended")
+  expiryDate    DateTime?      @map("expiry_date") @db.Date
+
+  // 审计字段
+  createdBy  String    @map("created_by") @db.VarChar(36)
+  reviewedBy String?   @map("reviewed_by") @db.VarChar(36)
+  reviewedAt DateTime? @map("reviewed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  // 关联关系
+  creator  User  @relation("ResourceCreator", fields: [createdBy], references: [id])
+  reviewer User? @relation("ResourceReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([resourceType, category], map: "idx_type_category")
+  @@index([accessLevel, visibility], map: "idx_access")
+  @@index([status, isRecommended], map: "idx_status_recommended")
+  @@index([rating], map: "idx_rating")
+  @@index([createdAt], map: "idx_created_at")
+  @@map("mentorship_resources")
+}
+
+// =====================================================
+// 带教管理系统枚举类型
+// =====================================================
+
+enum MentorshipProjectType {
+  TRAINING_BASED
+  DIRECT_MENTORSHIP
+  SKILL_DEVELOPMENT
+}
+
+enum MentorshipStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
+enum MentorType {
+  DEPARTMENT_ASSIGNED
+  ACADEMY_CERTIFIED
+  EXTERNAL
+}
+
+enum RelationshipType {
+  ONE_TO_ONE
+  ONE_TO_MANY
+  GROUP_MENTORSHIP
+}
+
+enum MentorshipScope {
+  FULL_PROJECT
+  SPECIFIC_PHASE
+  SKILL_SPECIFIC
+}
+
+enum MatchingType {
+  MANUAL
+  SMART_ASSISTED
+  AUTO_ASSIGNED
+}
+
+enum RelationshipStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  TERMINATED
+}
+
+enum MentorshipProjectSourceType {
+  TRAINING_PROJECT
+  MENTORSHIP_PROJECT
+}
+
+enum PhaseStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  SKIPPED
+}
+
+enum TaskType {
+  LEARNING
+  PRACTICE
+  ASSESSMENT
+  DISCUSSION
+  MILESTONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum AssignedTo {
+  STUDENT
+  MENTOR
+  BOTH
+}
+
+enum InteractionType {
+  MEETING
+  REVIEW
+  GUIDANCE
+  ASSESSMENT
+  DISCUSSION
+  FEEDBACK
+}
+
+enum InteractionMethod {
+  FACE_TO_FACE
+  ONLINE
+  PHONE
+  EMAIL
+  INSTANT_MESSAGE
+}
+
+enum Initiator {
+  MENTOR
+  STUDENT
+  SYSTEM
+}
+
+enum EvaluationType {
+  PHASE
+  MILESTONE
+  FINAL
+  PERIODIC
+  AD_HOC
+}
+
+enum EvaluatorType {
+  MENTOR
+  STUDENT
+  SUPERVISOR
+  EXTERNAL
+}
+
+enum EvaluateeType {
+  MENTOR
+  STUDENT
+}
+
+enum EvaluationStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+  FINALIZED
+}
+
+enum EvaluationVisibility {
+  PRIVATE
+  SHARED
+  PUBLIC
+}
+
+enum PlanStatus {
+  DRAFT
+  APPROVED
+  ACTIVE
+  COMPLETED
+  REVISED
+  CANCELLED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ResourceTypeEnum {
+  DOCUMENT
+  VIDEO
+  LINK
+  TEMPLATE
+  TOOL
+  REFERENCE
+}
+
+enum AccessLevel {
+  PUBLIC
+  AUTHENTICATED
+  MENTOR_ONLY
+  ADMIN_ONLY
+}
+
+enum ResourceVisibility {
+  PUBLIC
+  PRIVATE
+  RESTRICTED
+}
