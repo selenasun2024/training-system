@@ -323,6 +323,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, defineComponent, watch } from 'vue';
 import { storeToRefs } from 'pinia';
+import logger, { logUserAction } from '@/utils/logger';
 import { InfoFilled, ArrowDown, ArrowLeft, Operation, Edit, Document, User, Reading, List, DataAnalysis, Notification, DocumentAdd, Promotion, RefreshLeft, Check, DocumentCopy, UserFilled, ArrowRight } from '@element-plus/icons-vue';
 import ProposalManagement from '../components/ProposalManagement.vue';
 import BasicInfoManagement from '../components/BasicInfoManagement.vue';
@@ -431,32 +432,32 @@ const effectiveProjectType = computed(() => {
   if (isNewProject.value) {
     // 对于新项目，实时使用在"基本信息"中选择的类型
     result = currentProjectType.value;
-    console.log('🔍 新项目 - effectiveProjectType:', result, '来源: currentProjectType.value');
+    logger.debug('新项目类型获取', { result, source: 'currentProjectType' });
   } else {
     // 对于现有项目，使用从后端加载的数据
     result = projectData.value?.type || '';
-    console.log('🔍 现有项目 - effectiveProjectType:', result, '来源: projectData.value?.type');
+    logger.debug('现有项目类型获取', { result, source: 'projectData.type' });
   }
   
-  console.log('🔍 最终传递给子组件的项目类型:', result);
+  logger.debug('传递给子组件的项目类型', { effectiveProjectType: result });
   return result;
 });
 
 const participants = computed(() => {
   const participantsData = projectData.value?.participants || [];
-  console.log('🔍 ProjectDetail - participants computed 被调用');
-  console.log('🔍 projectData.value:', projectData.value);
-  console.log('🔍 participants 数据:', participantsData);
-  console.log('🔍 participants 长度:', participantsData.length);
+  logger.debug('计算参与者数据');
+  logger.debug('项目数据', { hasProjectData: !!projectData.value });
+  logger.debug('参与者原始数据', { count: participantsData.length });
+  // 移除重复日志
   if (participantsData.length > 0) {
-    console.log('🔍 第一个participant结构:', participantsData[0]);
+    logger.debug('第一个参与者结构', { sample: participantsData[0] });
   }
   return participantsData;
 });
 
 // 处理参与者更新事件
 const handleParticipantsUpdated = async (updatedParticipants: any[]) => {
-  console.log('🔄 参与者数据已更新:', updatedParticipants);
+  logger.info('参与者数据已更新', { count: updatedParticipants.length });
   
   // 如果是新项目，暂存参与者数据
   if (isNewProject.value) {
@@ -512,17 +513,17 @@ const availableUsers = ref<{ id: string; name: string }[]>([]);
 // 加载用户列表
 const loadAvailableUsers = async () => {
   try {
-    console.log('🔄 加载用户列表...');
+    logger.debug('开始加载用户列表');
     const { searchUsers } = await import('@/api/modules/user');
     const users = await searchUsers({ limit: 100 });
-    console.log('✅ 用户列表加载成功:', users);
+    logger.info('用户列表加载成功', { count: users.length });
     
     availableUsers.value = users.map(user => ({
       id: user.id,
       name: user.name,
     }));
   } catch (error) {
-    console.error('❌ 加载用户列表失败:', error);
+    logger.error('加载用户列表失败', error);
     // 如果加载失败，使用模拟数据作为兜底
     availableUsers.value = [
       { id: 'user-1', name: '张经理' },
@@ -535,10 +536,10 @@ const loadAvailableUsers = async () => {
 
 // 监听菜单切换，当切换到"任务"时加载任务数据
 watch(activeMenu, async (newMenu, oldMenu) => {
-  console.log('📝 菜单切换:', oldMenu, '->', newMenu);
+  logUserAction('菜单切换', 'ProjectDetail', { from: oldMenu, to: newMenu });
   
   if (newMenu === 'tasks' && !isNewProject.value) {
-    console.log('📝 切换到任务菜单，开始加载项目任务数据');
+    logger.debug('切换到任务菜单，加载任务数据');
     await trainingStageStore.loadProjectTasks(projectNo.value);
   }
 }, { immediate: false });
@@ -555,7 +556,7 @@ const menuItems = [
 // --- 菜单切换处理 ---
 function handleMenuSelect(index: string) {
   activeMenu.value = index;
-  console.log('菜单切换:', index);
+  logUserAction('菜单选择', 'ProjectDetail', { menuIndex: index });
 }
 
 // --- 基本信息编辑处理 ---
@@ -605,19 +606,19 @@ async function handleConfigUpdate(newConfig: any) {
       await updateProject(projectNo.value, updateData);
       ElMessage.success('配置已自动保存');
     } catch (error) {
-      console.error('❌ 保存项目配置失败:', error);
+      logger.error('保存项目配置失败', error);
       ElMessage.error('保存配置失败');
     }
   }
 }
 
 function handleFormDataUpdate(data: any) {
-  console.log('表单数据更新:', data);
+  logger.debug('表单数据更新', { formData: data });
   formData.value = data;
 }
 
 function handleProjectTypeChanged(projectType: string) {
-  console.log('🔄 项目类型变化:', projectType);
+  logger.info('项目类型变化', { newProjectType: projectType });
   currentProjectType.value = projectType;
 }
 
@@ -729,7 +730,7 @@ const showMeetingTab = computed(() => {
 const fetchProjectData = async () => {
   if (isNewProject.value) {
     // 新项目：初始化空数据和默认配置
-    console.log('🔍 新项目 - 初始化空数据');
+    logger.debug('新项目初始化空数据');
     projectData.value = null;
     // 重置为默认配置
     Object.assign(projectConfig, {

@@ -258,6 +258,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { Position, RefreshLeft, View } from '@element-plus/icons-vue';
+import logger from '@/utils/logger';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useProposalStore } from '../stores/proposal';
 import { storeToRefs } from 'pinia';
@@ -328,18 +329,18 @@ const divisionManagementComponentRef = ref<InstanceType<typeof DivisionManagemen
 
 // 初始化
 onMounted(async () => {
-  console.log('📋 ProposalManagement 组件挂载:', {
+  logger.info('ProposalManagement组件挂载', {
     projectId: props.projectId,
     isNewProject: props.isNewProject,
     willLoadProposal: props.projectId && !props.isNewProject
   });
   
   if (props.projectId && !props.isNewProject) {
-    console.log('🔄 开始调用 loadProposal...');
+    logger.debug('开始加载提案数据');
     await proposalStore.loadProposal(props.projectId);
-    console.log('✅ loadProposal 调用完成');
+    logger.debug('loadProposal调用完成');
   } else {
-    console.log('⚠️ 跳过 loadProposal 调用');
+    logger.debug('跳过loadProposal调用，项目ID为空');
   }
   
   // 设置默认激活的TAB
@@ -459,7 +460,7 @@ const loadPreviewData = async () => {
     
     await Promise.allSettled(promises);
   } catch (error) {
-    console.error('加载预览数据失败:', error);
+    logger.error('加载预览数据失败', error);
   }
 };
 
@@ -474,27 +475,27 @@ const loadParticipants = async () => {
       previewData.participants = [];
     }
   } catch (error) {
-    console.error('加载参与者数据失败:', error);
+    logger.error('加载参与者数据失败', error);
   }
 };
 
 // 加载分组数据
 const loadGroups = async () => {
   try {
-    console.log('🔍 预览：加载分组数据，项目ID:', props.projectId);
+    logger.debug('预览加载分组数据', { projectId: props.projectId });
     
     if (!props.projectId) {
-      console.log('⚠️ 预览：项目ID为空，跳过分组加载');
+      logger.warn('预览跳过分组加载，项目ID为空');
       previewData.groups = [];
       return;
     }
     
     await groupStore.fetchGroups(props.projectId);
-    console.log('✅ 预览：groupStore.groups:', groupStore.groups);
+    logger.debug('预览groupStore数据', { groupsCount: groupStore.groups?.length || 0 });
     
     // 检查store中的数据格式
     if (!groupStore.groups || !Array.isArray(groupStore.groups)) {
-      console.warn('⚠️ 预览：groupStore返回数据格式异常:', groupStore.groups);
+      logger.warn('预览groupStore数据格式异常', { groups: groupStore.groups });
       previewData.groups = [];
       return;
     }
@@ -519,20 +520,22 @@ const loadGroups = async () => {
       };
     });
     
-    console.log('✅ 预览：分组数据加载成功，分组数:', previewData.groups.length);
-    console.log('✅ 预览：分组详情:', previewData.groups.map(g => ({ 
-      name: g.name, 
-      memberCount: g.memberCount,
-      studentsPreview: g.students?.slice(0, 2).map(s => s.name).join(', ') || '无成员'
-    })));
+    logger.info('预览分组数据加载成功', { groupCount: previewData.groups.length });
+    logger.debug('预览分组详情', { 
+      groups: previewData.groups.map(g => ({ 
+        name: g.name, 
+        memberCount: g.memberCount,
+        studentsPreview: g.students?.slice(0, 2).map(s => s.name).join(', ') || '无成员'
+      })) 
+    });
     
     // 如果没有分组数据，提供提示信息
     if (previewData.groups.length === 0) {
-      console.log('⚠️ 预览：没有分组数据，可能项目尚未配置分组');
+      logger.warn('预览没有分组数据，项目尚未配置分组');
     }
     
   } catch (error) {
-    console.error('❌ 预览：加载分组数据失败:', error);
+    logger.error('预览加载分组数据失败', error);
     previewData.groups = [];
     
     // 不显示错误消息，只在控制台记录

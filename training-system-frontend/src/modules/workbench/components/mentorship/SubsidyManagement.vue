@@ -370,6 +370,27 @@
         @current-change="handleCurrentChange"
       />
     </div>
+
+    <!-- 安全对话框组件 -->
+    <SubsidyDetailDialog
+      v-model="showSubsidyDetailDialog"
+      title="补贴详情"
+      :mentor-data="subsidyDetailData.mentorData"
+      :students-data="subsidyDetailData.studentsData"
+      :summary-data="subsidyDetailData.summaryData"
+    />
+
+    <PerformanceDetailDialog
+      v-model="showPerformanceDetailDialog"
+      :mentor-pairs="performanceDetailData"
+    />
+
+    <EditCriteriaDialog
+      v-model="showEditCriteriaDialog"
+      title="编辑考核指标"
+      :initial-data="editCriteriaData"
+      @confirm="handleEditCriteriaConfirm"
+    />
   </div>
 </template>
 
@@ -388,6 +409,23 @@ const filterStatus = ref('')
 const filterDepartment = ref('')
 const selectedRows = ref([])
 const showEditDialog = ref(false)
+
+// 安全对话框相关数据
+const showSubsidyDetailDialog = ref(false)
+const showPerformanceDetailDialog = ref(false)
+const showEditCriteriaDialog = ref(false)
+const subsidyDetailData = ref({
+  mentorData: {},
+  studentsData: [],
+  summaryData: {}
+})
+const performanceDetailData = ref([])
+const editCriteriaData = ref({
+  mentorSuccessRate: 0,
+  mentorHasTeachingMaterials: false,
+  mentorHasComplaints: false,
+  students: []
+})
 const showRemindDialog = ref(false)
 const selectedSubsidy = ref<any>(null)
 
@@ -882,79 +920,44 @@ const selectableRow = (row: any) => {
   return row.status === 'pending_review' && row.isFirstStudentRow
 }
 
-// 补贴操作相关方法
+// 补贴操作相关方法 - 使用安全组件
 const viewSubsidyDetails = (row: any) => {
   // 获取该导师的原始数据，包含所有学员
   const originalData = subsidies.value.find(s => s.id === row.id)
   if (!originalData) return
   
-  // 生成所有学员的详情
-  const studentsInfo = originalData.mentoredStudents.map((student: any, index: number) => {
-    const studentSubsidyAmount = getStandardAmount(originalData.mentorLevel, student.sequence)
-    return `
-      <div style="margin-bottom: 12px; padding: 10px; background: ${index % 2 === 0 ? '#f8f9fa' : '#ffffff'}; border-radius: 6px; border: 1px solid #e9ecef;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <strong style="color: #409eff; font-size: 14px;">${student.name}</strong>
-          <span style="background: #e3f2fd; color: #1976d2; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${getSequenceText(student.sequence)}</span>
-        </div>
-        <div style="font-size: 13px; line-height: 1.4;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <div>评价分数: <strong>${student.criteria.evaluationScore}/100</strong></div>
-            <div>在职考核: <strong style="color: ${student.criteria.employment ? '#4caf50' : '#f44336'};">${student.criteria.employment ? '在职' : '离职'}</strong></div>
-            <div>带教时长: <strong>${student.criteria.duration}个月</strong></div>
-            <div>投诉事故: <strong style="color: ${student.criteria.hasComplaints ? '#f44336' : '#4caf50'};">${student.criteria.hasComplaints ? '有' : '无'}</strong></div>
-            <div>补贴金额: <strong style="color: #4caf50;">¥${studentSubsidyAmount}</strong></div>
-            <div>发放状态: <strong style="color: ${student.paid ? '#4caf50' : '#ff9800'};">${student.paid ? '已发放' : '未发放'}</strong></div>
-          </div>
-        </div>
-      </div>
-    `
-  }).join('')
+  // 准备安全的数据结构
+  const studentsData = originalData.mentoredStudents.map((student: any) => ({
+    name: student.name,
+    department: student.department || '未知部门',
+    criteria: {
+      evaluationScore: student.criteria.evaluationScore,
+      employment: student.criteria.employment,
+      duration: student.criteria.duration,
+      hasComplaints: student.criteria.hasComplaints
+    },
+    paid: student.paid
+  }))
   
-  const detailsHtml = `
-    <div style="text-align: left; line-height: 1.8; color: #303133; background: white; padding: 0; font-family: 'Microsoft YaHei', Arial, sans-serif;">
-      <div style="margin-bottom: 20px; padding: 12px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #409eff;">
-        <h4 style="margin: 0 0 10px 0; font-size: 16px; color: #409eff; font-weight: 600;">👤 导师信息</h4>
-        <div style="font-size: 14px; line-height: 1.6;">
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">导师姓名：</strong><span style="color: #303133;">${originalData.mentorName}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">所在部门：</strong><span style="color: #303133;">${originalData.department}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">认证类型：</strong><span style="color: #303133;">${getCertificationTypeText(originalData.mentorLevel)}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">带教学员数：</strong><span style="color: #303133;">${originalData.studentCount}人</span></p>
-        </div>
-      </div>
-      
-      <div style="margin-bottom: 20px; padding: 12px; background: #f0f9f0; border-radius: 8px; border-left: 4px solid #67c23a;">
-        <h4 style="margin: 0 0 10px 0; font-size: 16px; color: #67c23a; font-weight: 600;">👨‍🎓 所有学员详情</h4>
-        <div style="max-height: 300px; overflow-y: auto;">
-          ${studentsInfo}
-        </div>
-      </div>
-      
-      <div style="margin-bottom: 0; padding: 12px; background: #fef9e7; border-radius: 8px; border-left: 4px solid #e6a23c;">
-        <h4 style="margin: 0 0 10px 0; font-size: 16px; color: #e6a23c; font-weight: 600;">💰 补贴汇总</h4>
-        <div style="font-size: 14px; line-height: 1.6;">
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">申请月份：</strong><span style="color: #303133;">${originalData.month}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">总补贴金额：</strong><span style="color: #67c23a; font-weight: 700; font-size: 16px;">¥${row.totalSubsidy}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">平均评分：</strong><span style="color: #303133;">${row.averageScore}分</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">审批状态：</strong><span style="color: ${getStatusColor(originalData.status)}; font-weight: 700; font-size: 14px;">${getStatusText(originalData.status)}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">带教成功率：</strong><span style="color: #303133;">${row.mentorSuccessRate}%</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">教案记录：</strong><span style="color: ${row.mentorHasTeachingMaterials ? '#67c23a' : '#f56c6c'};">${row.mentorHasTeachingMaterials ? '完整' : '不完整'}</span></p>
-        </div>
-      </div>
-    </div>
-  `
+  subsidyDetailData.value = {
+    mentorData: {
+      mentorName: originalData.mentorName,
+      department: originalData.department,
+      mentorLevel: originalData.mentorLevel,
+      studentCount: originalData.studentCount,
+      month: originalData.month,
+      status: originalData.status
+    },
+    studentsData,
+    summaryData: {
+      totalSubsidy: row.totalSubsidy,
+      averageScore: row.averageScore,
+      mentorSuccessRate: row.mentorSuccessRate,
+      mentorHasTeachingMaterials: row.mentorHasTeachingMaterials
+    }
+  }
   
-  ElMessageBox({
-    title: `${originalData.mentorName} 的补贴详情`,
-    message: detailsHtml,
-    dangerouslyUseHTMLString: true,
-    confirmButtonText: '关闭',
-    type: 'info',
-    customClass: 'clear-detail-dialog',
-    center: false,
-    closeOnClickModal: true,
-    closeOnPressEscape: true
-  })
+  showSubsidyDetailDialog.value = true
 }
 
 // 部门审批
@@ -1055,227 +1058,120 @@ const payStudentSubsidy = async (row: any) => {
   }
 }
 
-// 查看师徒对考核详情
+// 查看师徒对考核详情 - 使用安全组件
 const viewStudentPerformance = (row: any) => {
-  const performanceHtml = `
-    <div style="text-align: left; line-height: 1.8; color: #303133; background: white; padding: 0; font-family: 'Microsoft YaHei', Arial, sans-serif;">
-      <div style="margin-bottom: 20px; padding: 12px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #409eff;">
-        <h4 style="margin: 0 0 10px 0; font-size: 16px; color: #409eff; font-weight: 600;">👥 师徒关系</h4>
-        <div style="font-size: 14px; line-height: 1.6;">
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">导师：</strong><span style="color: #303133;">${row.mentorName}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">学员：</strong><span style="color: #303133;">${row.studentName}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">关系状态：</strong><span style="color: #67c23a;">${row.relationshipStatus === 'active' ? '进行中' : '已结束'}</span></p>
-        </div>
-      </div>
-      
-      <div style="margin-bottom: 20px; padding: 12px; background: #f0f9f0; border-radius: 8px; border-left: 4px solid #67c23a;">
-        <h4 style="margin: 0 0 10px 0; font-size: 16px; color: #67c23a; font-weight: 600;">📊 考核表现</h4>
-        <div style="font-size: 14px; line-height: 1.6;">
-                     <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">在职考核：</strong><span style="color: ${row.studentCriteria.employment ? '#67c23a' : '#f56c6c'};">${row.studentCriteria.employment ? '在职' : '离职'}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">评价分数：</strong><span style="color: #303133;">${row.studentCriteria.evaluationScore}/100</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">投诉事故：</strong><span style="color: ${row.studentCriteria.hasComplaints ? '#f56c6c' : '#67c23a'};">${row.studentCriteria.hasComplaints ? '有' : '无'}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">带教时长：</strong><span style="color: #303133;">${row.studentCriteria.duration}个月</span></p>
-        </div>
-      </div>
-      
-      <div style="margin-bottom: 0; padding: 12px; background: #fef9e7; border-radius: 8px; border-left: 4px solid #e6a23c;">
-        <h4 style="margin: 0 0 10px 0; font-size: 16px; color: #e6a23c; font-weight: 600;">💰 补贴状态</h4>
-        <div style="font-size: 14px; line-height: 1.6;">
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">补贴金额：</strong><span style="color: #67c23a; font-weight: 700;">¥${row.studentSubsidyAmount}</span></p>
-          <p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">发放状态：</strong><span style="color: ${row.studentPaid ? '#67c23a' : '#e6a23c'}; font-weight: 700;">${row.studentPaid ? '已发放' : '未发放'}</span></p>
-          ${row.studentPaid ? `<p style="margin: 8px 0; color: #303133;"><strong style="color: #606266;">发放时间：</strong><span style="color: #303133;">${formatDate(new Date())}</span></p>` : ''}
-        </div>
-      </div>
-    </div>
-  `
+  // 准备师徒对数据
+  const mentorPair = {
+    mentorName: row.mentorName,
+    mentorDepartment: row.department || '未知部门',
+    studentName: row.studentName,
+    studentDepartment: row.studentDepartment || '未知部门',
+    employment: row.studentCriteria?.employment || false,
+    evaluationScore: row.studentCriteria?.evaluationScore || 0,
+    duration: row.studentCriteria?.duration || 0,
+    hasComplaints: row.studentCriteria?.hasComplaints || false,
+    subsidyAmount: row.studentSubsidyAmount || 0,
+    paid: row.studentPaid || false,
+    overallScore: Math.round(
+      (row.studentCriteria?.evaluationScore || 0) + 
+      (row.studentCriteria?.employment ? 10 : 0) + 
+      (row.studentCriteria?.hasComplaints ? -10 : 10)
+    ),
+    grade: getPerformanceGrade(
+      row.studentCriteria?.evaluationScore || 0, 
+      row.studentCriteria?.employment || false, 
+      row.studentCriteria?.hasComplaints || false
+    ),
+    effect: getPerformanceEffect(
+      row.studentCriteria?.evaluationScore || 0, 
+      row.studentCriteria?.employment || false
+    )
+  }
   
-  ElMessageBox({
-    title: '师徒对考核详情',
-    message: performanceHtml,
-    dangerouslyUseHTMLString: true,
-    confirmButtonText: '关闭',
-    type: 'info',
-    customClass: 'clear-detail-dialog',
-    center: false,
-    closeOnClickModal: true,
-    closeOnPressEscape: true
-  })
+  performanceDetailData.value = [mentorPair]
+  showPerformanceDetailDialog.value = true
 }
 
-// 编辑所有学员的考核指标
+// 性能评估辅助函数
+const getPerformanceGrade = (score: number, employment: boolean, hasComplaints: boolean): string => {
+  let totalScore = score
+  if (employment) totalScore += 10
+  if (hasComplaints) totalScore -= 15
+  
+  if (totalScore >= 90) return 'A'
+  if (totalScore >= 80) return 'B'
+  if (totalScore >= 70) return 'C'
+  return 'D'
+}
+
+const getPerformanceEffect = (score: number, employment: boolean): string => {
+  if (score >= 85 && employment) return 'excellent'
+  if (score >= 75 && employment) return 'good'
+  if (score >= 65) return 'fair'
+  return 'poor'
+}
+
+// 编辑所有学员的考核指标 - 使用安全组件
 const editAllStudentsCriteria = (row: any) => {
   // 获取该导师的原始数据，包含所有学员
   const originalData = subsidies.value.find(s => s.id === row.id)
   if (!originalData) return
   
-  // 生成所有学员的编辑表单
-  const studentsEditForms = originalData.mentoredStudents.map((student: any, index: number) => {
-    return `
-      <div style="margin-bottom: 20px; padding: 12px; background: ${index % 2 === 0 ? '#f8f9fa' : '#ffffff'}; border-radius: 8px; border: 1px solid #e9ecef;">
-        <h4 style="margin: 0 0 15px 0; color: #409eff; font-size: 16px;">
-          👨‍🎓 ${student.name} (${getSequenceText(student.sequence)})
-        </h4>
-        <div style="display: grid; gap: 12px;">
-          <div>
-            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: #495057;">在职考核：</label>
-            <select id="employment_${index}" style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px;">
-              <option value="true" ${student.criteria.employment ? 'selected' : ''}>在职</option>
-              <option value="false" ${!student.criteria.employment ? 'selected' : ''}>离职</option>
-            </select>
-          </div>
-          
-          <div>
-            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: #495057;">评价分数：</label>
-            <input type="number" id="evaluationScore_${index}" min="0" max="100" value="${student.criteria.evaluationScore}" 
-                   style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;" />
-          </div>
-          
-          <div>
-            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: #495057;">投诉事故：</label>
-            <select id="hasComplaints_${index}" style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px;">
-              <option value="false" ${!student.criteria.hasComplaints ? 'selected' : ''}>无</option>
-              <option value="true" ${student.criteria.hasComplaints ? 'selected' : ''}>有</option>
-            </select>
-          </div>
-          
-          <div>
-            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: #495057;">带教时长（月）：</label>
-            <input type="number" id="duration_${index}" min="1" max="12" value="${student.criteria.duration}" 
-                   style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;" />
-          </div>
-        </div>
-      </div>
-    `
-  }).join('')
+  // 准备学员数据
+  const studentsData = originalData.mentoredStudents.map((student: any) => ({
+    name: student.name,
+    department: student.department || '未知部门',
+    employment: student.criteria?.employment || false,
+    evaluationScore: student.criteria?.evaluationScore || 0,
+    hasComplaints: student.criteria?.hasComplaints || false,
+    duration: student.criteria?.duration || 1
+  }))
   
-  const editFormHtml = `
-    <div style="text-align: left; color: #303133; font-family: 'Microsoft YaHei', Arial, sans-serif;">
-      <!-- 只读信息区域 -->
-      <div style="margin-bottom: 20px; padding: 12px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #409eff;">
-        <h4 style="margin: 0 0 10px 0; color: #409eff; font-size: 16px;">📋 导师基本信息（只读）</h4>
-        <div style="font-size: 14px; line-height: 1.5; color: #606266;">
-          <p style="margin: 4px 0;"><strong>导师：</strong>${originalData.mentorName}</p>
-          <p style="margin: 4px 0;"><strong>部门：</strong>${originalData.department}</p>
-          <p style="margin: 4px 0;"><strong>带教学员数：</strong>${originalData.studentCount}人</p>
-        </div>
-      </div>
-      
-      <!-- 所有学员的考核指标编辑区域 -->
-      <div style="margin-bottom: 20px;">
-        <h4 style="margin: 0 0 15px 0; color: #67c23a; font-size: 16px;">✏️ 所有学员考核指标</h4>
-        <div style="max-height: 400px; overflow-y: auto;">
-          ${studentsEditForms}
-        </div>
-      </div>
-      
-      <!-- 导师考核指标编辑区域 -->
-      <div style="margin-bottom: 0; padding: 12px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #409eff;">
-        <h4 style="margin: 0 0 15px 0; color: #409eff; font-size: 16px;">👨‍🏫 带教老师考核指标</h4>
-        <div style="display: grid; gap: 12px;">
-          <div>
-            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: #495057;">带教成功率（%）：</label>
-            <input type="number" id="mentorSuccessRate" min="0" max="100" value="${row.mentorSuccessRate}" 
-                   style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;" />
-          </div>
-          
-          <div>
-            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: #495057;">教案记录：</label>
-            <select id="mentorHasTeachingMaterials" style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px;">
-              <option value="true" ${row.mentorHasTeachingMaterials ? 'selected' : ''}>有</option>
-              <option value="false" ${!row.mentorHasTeachingMaterials ? 'selected' : ''}>无</option>
-            </select>
-          </div>
-          
-          <div>
-            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: #495057;">投诉事故：</label>
-            <select id="mentorHasComplaints" style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px;">
-              <option value="false" ${!row.mentorHasComplaints ? 'selected' : ''}>无</option>
-              <option value="true" ${row.mentorHasComplaints ? 'selected' : ''}>有</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>
-  `
+  // 准备初始数据
+  editCriteriaData.value = {
+    mentorSuccessRate: row.mentorSuccessRate || 0,
+    mentorHasTeachingMaterials: row.mentorHasTeachingMaterials || false,
+    mentorHasComplaints: row.mentorHasComplaints || false,
+    students: studentsData
+  }
   
-  ElMessageBox({
-    title: `编辑考核指标 - ${originalData.mentorName} (${originalData.studentCount}名学员)`,
-    message: editFormHtml,
-    dangerouslyUseHTMLString: true,
-    showCancelButton: true,
-    confirmButtonText: '保存',
-    cancelButtonText: '取消',
-    customClass: 'edit-criteria-dialog',
-    beforeClose: (action, instance, done) => {
-      if (action === 'confirm') {
-        try {
-          // 获取导师考核指标数据
-          const mentorSuccessRate = parseInt((document.getElementById('mentorSuccessRate') as HTMLInputElement)?.value || '0')
-          const mentorHasTeachingMaterials = (document.getElementById('mentorHasTeachingMaterials') as HTMLSelectElement)?.value === 'true'
-          const mentorHasComplaints = (document.getElementById('mentorHasComplaints') as HTMLSelectElement)?.value === 'true'
+  showEditCriteriaDialog.value = true
+}
+
+// 处理编辑表单提交
+const handleEditCriteriaConfirm = (data: any) => {
+  try {
+    // 获取原始数据进行更新
+    const originalData = subsidies.value.find(s => 
+      s.mentoredStudents.some((student: any) => 
+        data.students.some((editStudent: any) => editStudent.name === student.name)
+      )
+    )
+    
+    if (originalData) {
+      // 更新所有学员的考核指标
+      originalData.mentoredStudents.forEach((student: any) => {
+        const editStudentData = data.students.find((s: any) => s.name === student.name)
+        if (student.criteria && editStudentData) {
+          student.criteria.employment = editStudentData.employment
+          student.criteria.evaluationScore = editStudentData.evaluationScore
+          student.criteria.hasComplaints = editStudentData.hasComplaints
+          student.criteria.duration = editStudentData.duration
+          student.criteria.lastModified = new Date()
+          student.criteria.modifiedBy = '当前用户'
           
-          // 验证导师数据
-          if (mentorSuccessRate < 0 || mentorSuccessRate > 100) {
-            ElMessage.error('带教成功率必须在0-100之间')
-            return
-          }
-          
-          // 获取所有学员的考核指标数据并验证
-          const studentsData: any[] = []
-          for (let i = 0; i < originalData.mentoredStudents.length; i++) {
-            const employment = (document.getElementById(`employment_${i}`) as HTMLSelectElement)?.value === 'true'
-            const evaluationScore = parseInt((document.getElementById(`evaluationScore_${i}`) as HTMLInputElement)?.value || '0')
-            const hasComplaints = (document.getElementById(`hasComplaints_${i}`) as HTMLSelectElement)?.value === 'true'
-            const duration = parseInt((document.getElementById(`duration_${i}`) as HTMLInputElement)?.value || '1')
-            
-            // 验证学员数据
-            if (evaluationScore < 0 || evaluationScore > 100) {
-              ElMessage.error(`${originalData.mentoredStudents[i].name} 的评价分数必须在0-100之间`)
-              return
-            }
-            if (duration < 1 || duration > 12) {
-              ElMessage.error(`${originalData.mentoredStudents[i].name} 的带教时长必须在1-12个月之间`)
-              return
-            }
-            
-            studentsData.push({
-              employment,
-              evaluationScore,
-              hasComplaints,
-              duration
-            })
-          }
-          
-          // 更新数据
-          const targetData = subsidies.value.find(s => s.id === originalData.id)
-          if (targetData) {
-            // 更新所有学员的考核指标
-            targetData.mentoredStudents.forEach((student: any, index: number) => {
-              if (student.criteria && studentsData[index]) {
-                student.criteria.employment = studentsData[index].employment
-                student.criteria.evaluationScore = studentsData[index].evaluationScore
-                student.criteria.hasComplaints = studentsData[index].hasComplaints
-                student.criteria.duration = studentsData[index].duration
-                student.criteria.lastModified = new Date()
-                student.criteria.modifiedBy = '当前用户'
-                
-                // 同时更新导师考核指标
-                student.criteria.mentorSuccessRate = mentorSuccessRate
-                student.criteria.mentorHasTeachingMaterials = mentorHasTeachingMaterials
-                student.criteria.mentorHasComplaints = mentorHasComplaints
-              }
-            })
-          }
-          
-          ElMessage.success(`已更新 ${originalData.mentorName} 及其 ${originalData.studentCount} 名学员的考核指标`)
-        } catch (error) {
-          ElMessage.error('保存数据时出现错误，请重试')
-          return
+          // 同时更新导师考核指标
+          student.criteria.mentorSuccessRate = data.mentorSuccessRate
+          student.criteria.mentorHasTeachingMaterials = data.mentorHasTeachingMaterials
+          student.criteria.mentorHasComplaints = data.mentorHasComplaints
         }
-      }
-      done()
+      })
+      
+      ElMessage.success(`已更新 ${originalData.mentorName} 及其 ${originalData.studentCount} 名学员的考核指标`)
     }
-  })
+  } catch (error) {
+    ElMessage.error('保存数据时出现错误，请重试')
+  }
 }
 
 

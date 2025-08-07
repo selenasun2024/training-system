@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
 import { ElMessage } from 'element-plus'
+import logger, { logApi } from './logger'
 
 interface ApiResponse<T = any> {
   code: number
@@ -26,38 +27,48 @@ const service: AxiosInstance = axios.create({
 service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // 从localStorage获取token
-    let token = localStorage.getItem('token')
+    const token = localStorage.getItem('token')
     
-    // 临时解决方案：使用数据库中真实存在的辅导员身份用于测试
-    if (!token) {
-      localStorage.setItem('token', 'temp-test-token')
-      token = 'temp-test-token'
+    // 开发环境：如果没有token则设置开发用户身份
+    if (!token && import.meta.env.DEV) {
+      // 开发环境默认用户配置
+      if (!localStorage.getItem('userId')) {
+        const devUserConfig = {
+          userId: 'user-hr-001',
+          username: 'feng-qin', 
+          name: '冯芹',
+          userRole: 'counselor'
+        }
+        
+        Object.entries(devUserConfig).forEach(([key, value]) => {
+          localStorage.setItem(key, value)
+        })
+        
+        localStorage.setItem('token', 'dev-test-token')
+      }
     }
     
-    // 【开发环境配置】设置为辅导员身份，用于辅导员工作台、批阅功能等
-    // 注意：学习中心会使用自己的用户配置（PersonalCenter.vue中的DEV_USER_CONFIG）
-    if (!localStorage.getItem('userId')) {
-      localStorage.setItem('userId', 'user-hr-001') // 冯芹辅导员
-      localStorage.setItem('username', 'feng-qin')
-      localStorage.setItem('name', '冯芹')
-      localStorage.setItem('userRole', 'counselor') // 辅导员角色
+    // 添加认证头
+    const authToken = localStorage.getItem('token')
+    if (authToken && config.headers) {
+      config.headers['Authorization'] = `Bearer ${authToken}`
     }
     
-    // 临时关闭认证：注释掉Authorization头的添加
-    // if (token && config.headers) {
-    //   config.headers['Authorization'] = `Bearer ${token}`
-    // }
-    
-    console.log('🔍 请求配置:', {
-      url: config.url,
-      method: config.method,
-      headers: config.headers
-    })
+          // 记录API请求日志
+      logger.debug('API请求发送', {
+        url: config.url,
+        method: config.method?.toUpperCase(),
+        hasAuth: !!authToken,
+        baseURL: config.baseURL
+      })
     
     return config
   },
   (error: AxiosError) => {
-    console.error('Request error:', error)
+    logger.error('请求拦截器错误', error, {
+      url: error.config?.url,
+      method: error.config?.method?.toUpperCase()
+    })
     return Promise.reject(error)
   }
 )
@@ -66,6 +77,18 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response: AxiosResponse) => {
     const res = response.data
+    const { status, config } = response
+
+    // 记录API响应日志
+    logApi(
+      config.method?.toUpperCase() || 'UNKNOWN',
+      config.url || 'unknown',
+      status,
+      {
+        responseSize: JSON.stringify(res).length,
+        hasBusinessCode: res && typeof res === 'object' && 'code' in res
+      }
+    )
 
     // 处理两种响应格式：
     // 1. 标准格式: {code: 200, message: 'xx', data: {...}}
@@ -76,6 +99,15 @@ service.interceptors.response.use(
       // 检查业务状态码
       if (res.code !== 200 && res.code !== 201) {
         const errorMessage = res.message || '请求失败';
+        
+        // 记录业务错误
+        logger.warn('API业务错误', {
+          url: config.url,
+          method: config.method?.toUpperCase(),
+          businessCode: res.code,
+          message: errorMessage
+        })
+        
         ElMessage({
           type: 'error',
           message: errorMessage
@@ -90,7 +122,13 @@ service.interceptors.response.use(
     return res
   },
   (error: AxiosError<ErrorResponse>) => {
-    console.error('Response error:', error)
+    // 记录HTTP错误
+    logger.error('HTTP响应错误', error, {
+      url: error.config?.url,
+      method: error.config?.method?.toUpperCase(),
+      status: error.response?.status,
+      statusText: error.response?.statusText
+    })
     
     let message = '请求失败';
     

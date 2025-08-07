@@ -136,6 +136,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { Plus, Menu, User, Location, Clock, Delete } from '@element-plus/icons-vue';
+import logger, { logUserAction } from '@/utils/logger';
 import { ElMessageBox, ElMessage } from 'element-plus';
 import draggable from 'vuedraggable';
 import { useAgendaStore } from '../stores/agenda';
@@ -168,14 +169,14 @@ const isNewProject = projectId === 'new';
 // 自动保存议程数据到后端
 const autoSaveAgenda = async () => {
   if (isNewProject) {
-    console.log('⚠️ 新项目无法自动保存议程');
+    logger.warn('新项目无法自动保存议程');
     return;
   }
   
   try {
-    console.log('💾 自动保存议程数据...');
+    logger.debug('开始自动保存议程数据');
     const agendaData = agendaStore.getAgendaData();
-    console.log('💾 保存的议程数据:', agendaData);
+    logger.debug('保存的议程数据', { dayCount: agendaData.agenda.length });
     
     // 只更新config.agenda部分
     await updateProject(projectId, {
@@ -184,10 +185,10 @@ const autoSaveAgenda = async () => {
       }
     });
     
-    console.log('✅ 议程数据自动保存成功');
+    logger.info('议程数据自动保存成功');
     ElMessage.success('议程已自动保存');
   } catch (error) {
-    console.error('❌ 议程自动保存失败:', error);
+    logger.error('议程自动保存失败', error);
     ElMessage.error('议程保存失败，请稍后重试');
   }
 };
@@ -202,9 +203,9 @@ const settings = ref<Settings>({
 async function generateAgenda() {
   if (!settings.value.startDate) return;
   
-  console.log('⚠️ generateAgenda 被调用');
-  console.log('⚠️ 当前议程天数:', agendaStore.days.length);
-  console.log('⚠️ settings:', settings.value);
+  logger.debug('generateAgenda被调用');
+  logger.debug('当前议程天数', { dayCount: agendaStore.days.length });
+  logger.debug('议程设置', { settings: settings.value });
   
   // 如果已有议程数据，提示用户确认
   if (agendaStore.days.length > 0) {
@@ -224,13 +225,13 @@ async function generateAgenda() {
           }
         );
       } catch {
-        console.log('⚠️ 用户取消生成新议程');
+        logUserAction('取消生成议程', 'EventAgenda');
         return; // 用户取消
       }
     }
   }
   
-  console.log('🔄 生成新议程，天数:', settings.value.days);
+  logger.info('生成新议程', { days: settings.value.days });
   agendaStore.initializeDays(
     settings.value.startDate as string,
     settings.value.days,
@@ -238,16 +239,18 @@ async function generateAgenda() {
     settings.value.dayEnd,
   );
   activeDayIndex.value = 0;
-  console.log('🔄 生成完成，最终天数:', agendaStore.days.length);
+  logger.info('议程生成完成', { finalDayCount: agendaStore.days.length });
 }
 
 onMounted(() => {
-  console.log('🔄 EventAgenda onMounted - 当前议程天数:', agendaStore.days.length);
-  console.log('🔄 EventAgenda onMounted - 议程详情:', agendaStore.days.map(d => ({ 
-    date: d.date, 
-    itemCount: d.items.length 
-  })));
-  console.log('🔄 EventAgenda onMounted - 完整议程数据:', JSON.stringify(agendaStore.days, null, 2));
+  logger.debug('EventAgenda组件挂载', { dayCount: agendaStore.days.length });
+  logger.debug('EventAgenda议程详情', { 
+    agenda: agendaStore.days.map(d => ({ 
+      date: d.date, 
+      itemCount: d.items.length 
+    })) 
+  });
+  logger.debug('EventAgenda完整数据', { agendaData: agendaStore.days });
   
   // 只有在没有议程数据时才初始化
   if (agendaStore.days.length === 0) {
