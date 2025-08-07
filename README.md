@@ -328,16 +328,13 @@ docker build -t training-system-frontend ./training-system-frontend
 
 ## 📝 更新日志
 
-### v1.0.0 (2024-12-29)
+### v1.0.0 
 - ✅ 完成项目架构搭建
 - ✅ 完成数据库设计和迁移
 - ✅ 完成项目管理核心功能
 - ✅ 完成带教管理模块核心功能
 - ✅ 前后端完整集成测试
 
-## 📄 许可证
-
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
 
 ## 📞 联系方式
 
