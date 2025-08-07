@@ -28,10 +28,9 @@ export class RolesGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user as CurrentUser;
 
-    // 临时处理：在开发环境下，如果没有用户信息，默认允许访问
+    // 严格验证：必须有用户信息和角色
     if (!user || !user.roles) {
-      console.warn('开发模式：无用户信息，临时允许访问');
-      return true; // 临时允许访问，用于测试
+      throw new ForbiddenException('未找到用户身份信息，请重新登录');
     }
 
     // 检查用户是否具有所需角色之一
