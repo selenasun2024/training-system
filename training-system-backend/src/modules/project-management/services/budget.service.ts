@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
+import { LoggerService } from '../../../shared/infrastructure/logger/logger.service';
+import { WriteOperation, ReadOperation, BatchOperation } from '../../../shared/decorators/database-operation.decorator';
 
 export interface CreateBudgetLineDto {
   category: string;
@@ -39,11 +41,15 @@ export interface BudgetSummary {
 
 @Injectable()
 export class BudgetService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly logger: LoggerService
+  ) {}
 
   /**
    * 获取项目预算明细
    */
+  @ReadOperation('获取项目预算明细', ['budgetLine'])
   async getBudgetLines(
     projectId: string,
     query: BudgetQueryDto,
@@ -112,6 +118,7 @@ export class BudgetService {
   /**
    * 创建预算明细（支持批量）
    */
+  @BatchOperation('创建预算明细', ['budgetLine'])
   async createBudgetLines(
     projectId: string,
     createDtos: CreateBudgetLineDto[],
@@ -172,6 +179,7 @@ export class BudgetService {
   /**
    * 更新预算明细
    */
+  @WriteOperation('更新预算明细', ['budgetLine'])
   async updateBudgetLine(
     projectId: string,
     id: string,

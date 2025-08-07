@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
+import { LoggerService } from '../../../shared/infrastructure/logger/logger.service';
+import { DatabaseTransactionService } from '../../../shared/services/database-transaction.service';
+import { WriteOperation, ReadOperation, BatchOperation } from '../../../shared/decorators/database-operation.decorator';
 import {
   CreateMentorshipRelationshipDto,
   CreateMentorshipEvaluationDto,
@@ -14,7 +17,11 @@ export class ProjectMentorshipService {
   // 内存中存储手动创建的师徒关系
   private createdRelationships = new Map<string, any>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly logger: LoggerService,
+    private readonly dbTransaction: DatabaseTransactionService
+  ) {}
 
   /**
    * 获取项目师徒关系
@@ -25,7 +32,7 @@ export class ProjectMentorshipService {
     status?: string,
     currentUserId?: string
   ) {
-    console.log('🔍 ProjectMentorshipService: 获取项目师徒关系 - 项目ID:', projectId, '状态过滤:', status);
+    this.logger.info('获取项目师徒关系', { projectId, status, currentUserId });
 
     try {
       // 首先通过TrainingProject ID查找对应的MentorshipProject IDs
@@ -37,10 +44,10 @@ export class ProjectMentorshipService {
       });
 
       const mentorshipProjectIds = mentorshipProjects.map(mp => mp.id);
-      console.log('🔍 找到MentorshipProject IDs:', mentorshipProjectIds);
+      this.logger.debug('找到MentorshipProject IDs', { mentorshipProjectIds });
 
       if (mentorshipProjectIds.length === 0) {
-        console.log('🔍 没有找到对应的MentorshipProject，返回空结果');
+        this.logger.warn('没有找到对应的MentorshipProject', { projectId });
         return [];
       }
 
@@ -115,11 +122,15 @@ export class ProjectMentorshipService {
       // 合并数据库和内存中的关系
       const allRelationships = [...dbFormattedRelationships, ...filteredMemoryRelationships];
       
-      console.log('✅ 获取师徒关系成功 - 数据库:', dbFormattedRelationships.length, '内存:', filteredMemoryRelationships.length, '总计:', allRelationships.length);
+      this.logger.info('获取师徒关系成功', { 
+        databaseCount: dbFormattedRelationships.length, 
+        memoryCount: filteredMemoryRelationships.length, 
+        totalCount: allRelationships.length 
+      });
       
       return allRelationships;
     } catch (error) {
-      console.error('❌ 获取师徒关系失败:', error);
+      this.logger.logBusinessException('获取师徒关系', error, { projectId, status, currentUserId });
       throw new Error(`获取师徒关系失败: ${error.message}`);
     }
   }
@@ -129,7 +140,7 @@ export class ProjectMentorshipService {
    * 真正保存到数据库的MentorshipRelationship表中
    */
   async createMentorshipRelationship(createDto: CreateMentorshipRelationshipDto) {
-    console.log('📝 ProjectMentorshipService: 创建师徒关系 - 数据:', createDto);
+    this.logger.info('创建师徒关系', { createDto });
 
     try {
       // 首先获取TrainingProject信息
@@ -172,7 +183,7 @@ export class ProjectMentorshipService {
       });
 
       if (!mentorshipProject) {
-        console.log('🔄 创建新的MentorshipProject记录');
+        this.logger.debug('创建新的MentorshipProject记录');
         mentorshipProject = await this.prisma.mentorshipProject.create({
           data: {
             title: `${trainingProject.name} - ${mentor.name}带教${student.name}`,
@@ -198,9 +209,9 @@ export class ProjectMentorshipService {
             createdBy: createDto.createdBy || 'admin-001'
           }
         });
-        console.log('✅ MentorshipProject创建成功，ID:', mentorshipProject.id);
+        this.logger.info('MentorshipProject创建成功', { id: mentorshipProject.id });
       } else {
-        console.log('🔍 找到已存在的MentorshipProject，ID:', mentorshipProject.id);
+        this.logger.debug('找到已存在的MentorshipProject', { id: mentorshipProject.id });
       }
 
       // 检查导师是否已经是项目参与者
@@ -260,7 +271,7 @@ export class ProjectMentorshipService {
       });
 
       if (existingRelationship) {
-        console.log('⚠️ 师徒关系已存在，返回现有关系');
+        this.logger.warn('师徒关系已存在，返回现有关系');
         return {
           id: existingRelationship.id,
           projectId: existingRelationship.projectId,
@@ -300,7 +311,7 @@ export class ProjectMentorshipService {
         createdBy: createDto.createdBy || 'admin-001'
       };
 
-      console.log('📦 ProjectMentorshipService: 准备写入数据库的关系数据:', relationshipData);
+      this.logger.debug('准备写入数据库的关系数据', { relationshipData });
 
       const savedRelationship = await this.prisma.mentorshipRelationship.create({
         data: relationshipData,
@@ -334,10 +345,10 @@ export class ProjectMentorshipService {
       // 同时保存到内存中以保持向后兼容
       this.createdRelationships.set(relationship.id, relationship);
 
-      console.log('✅ 师徒关系创建成功并保存到数据库 - ID:', relationship.id);
+      this.logger.info('师徒关系创建成功', { id: relationship.id });
       return relationship;
     } catch (error) {
-      console.error('❌ 创建师徒关系失败:', error);
+      this.logger.logBusinessException('创建师徒关系', error);
       throw new Error(`创建师徒关系失败: ${error.message}`);
     }
   }
@@ -351,14 +362,14 @@ export class ProjectMentorshipService {
     queryParams?: any,
     currentUserId?: string
   ) {
-    console.log('🔍 ProjectMentorshipService: 获取带教进度 - 项目ID:', projectId, '参数:', queryParams);
+    this.logger.debug('获取带教进度', { projectId, queryParams });
 
     try {
       // 获取项目中的师徒关系（不限制状态，让任务进度显示所有关系）
       const relationships = await this.getProjectRelationships(projectId, undefined, currentUserId);
       
       if (relationships.length === 0) {
-        console.log('⚠️ 没有找到师徒关系');
+        this.logger.warn('没有找到师徒关系');
         return {
           summary: {
             totalStudents: 0,
@@ -398,7 +409,7 @@ export class ProjectMentorshipService {
         ]
       });
 
-      console.log(`📋 项目任务数量: ${projectTasks.length}`);
+      this.logger.debug('项目任务数量', { count: projectTasks.length });
 
       // 为每个师徒关系计算真实的任务进度数据
       const progressData = await Promise.all(relationships.map(async relationship => {
@@ -568,10 +579,10 @@ export class ProjectMentorshipService {
         }
       };
 
-      console.log('✅ 获取带教进度成功，学员数量:', paginatedData.length);
+      this.logger.info('获取带教进度成功', { studentCount: paginatedData.length });
       return result;
     } catch (error) {
-      console.error('❌ 获取带教进度失败:', error);
+      this.logger.logBusinessException('获取带教进度', error);
       throw new Error(`获取带教进度失败: ${error.message}`);
     }
   }
@@ -581,12 +592,13 @@ export class ProjectMentorshipService {
   /**
    * 提交评价
    */
+  @WriteOperation('提交师徒评价', ['mentorshipEvaluation', 'mentorshipRelationship'])
   async submitEvaluation(
     projectId: string,
     createDto: CreateMentorshipEvaluationDto,
     currentUserId?: string
   ) {
-    console.log('📝 ProjectMentorshipService: 提交评价 - 项目ID:', projectId, '数据:', createDto);
+    this.logger.info('提交师徒评价', { projectId, evaluationType: createDto.evaluationPeriod });
 
     try {
       // 首先检查师徒关系是否存在
@@ -602,12 +614,12 @@ export class ProjectMentorshipService {
         throw new Error(`师徒关系不存在: ${createDto.relationshipId}`);
       }
 
-      console.log('🔍 找到师徒关系:', relationship);
+      this.logger.debug('找到师徒关系', { relationshipId: relationship.id, mentorName: relationship.mentorName, studentName: relationship.studentName });
       
       // 🔧 检查项目ID不匹配的情况
       if (projectId !== relationship.projectId) {
-        console.log('⚠️ 项目ID不匹配 - 前端传递:', projectId, '师徒关系实际:', relationship.projectId);
-        console.log('🔧 将使用师徒关系实际的项目ID:', relationship.projectId);
+        this.logger.warn('项目ID不匹配', { frontendProjectId: projectId, actualProjectId: relationship.projectId });
+        this.logger.info('使用师徒关系实际项目ID', { actualProjectId: relationship.projectId });
       }
 
       // 确定评价者和被评价者的信息
@@ -663,18 +675,61 @@ export class ProjectMentorshipService {
         visibility: 'SHARED' as any,
       };
 
-      console.log('🔍 准备保存的评价数据:', evaluationData);
+      this.logger.debug('准备保存的评价数据', { evaluationData: { ...evaluationData, content: '***' } });
 
-      // 保存到数据库
-      const evaluation = await this.prisma.mentorshipEvaluation.create({
-        data: evaluationData
-      });
+      // 使用事务保存评价数据
+      const evaluation = await this.dbTransaction.executeTransaction(
+        async (tx) => {
+          // 再次验证师徒关系存在（事务内验证）
+          const verifyRelationship = await tx.mentorshipRelationship.findUnique({
+            where: { id: createDto.relationshipId }
+          });
+          
+          if (!verifyRelationship) {
+            throw new Error(`师徒关系不存在: ${createDto.relationshipId}`);
+          }
 
-      console.log('✅ 评价提交成功 - ID:', evaluation.id);
+          // 检查是否已有相同类型的评价
+          const existingEvaluation = await tx.mentorshipEvaluation.findFirst({
+            where: {
+              relationshipId: createDto.relationshipId,
+              evaluationType: evaluationData.evaluationType,
+              evaluatorType: evaluationData.evaluatorType,
+              status: { not: 'DELETED' }
+            }
+          });
+
+          if (existingEvaluation) {
+            this.logger.warn('相同类型评价已存在，将更新现有评价', { 
+              existingId: existingEvaluation.id 
+            });
+            
+            // 更新现有评价
+            return await tx.mentorshipEvaluation.update({
+              where: { id: existingEvaluation.id },
+              data: {
+                ...evaluationData,
+                updatedAt: new Date()
+              }
+            });
+          }
+
+          // 创建新评价
+          return await tx.mentorshipEvaluation.create({
+            data: evaluationData
+          });
+        },
+        {
+          name: '提交师徒评价',
+          timeout: 10000,
+          verbose: true
+        }
+      );
+
+      this.logger.info('评价提交成功', { evaluationId: evaluation.id, projectId, currentUserId });
       return evaluation;
     } catch (error) {
-      console.error('❌ 提交评价失败 - 详细错误:', error);
-      console.error('❌ 错误堆栈:', error.stack);
+      this.logger.logBusinessException('提交评价', error, { projectId, currentUserId });
       throw new Error(`提交评价失败: ${error.message}`);
     }
   }
@@ -705,7 +760,7 @@ export class ProjectMentorshipService {
     evaluatorId?: string,
     currentUserId?: string
   ) {
-    console.log('🔍 ProjectMentorshipService: 获取项目评价 - 项目ID:', projectId, '类型:', type, '评价者:', evaluatorId);
+    this.logger.debug('获取项目评价', { projectId, type, evaluatorId });
 
     try {
       // 查询数据库中的真实评价记录
@@ -796,10 +851,10 @@ export class ProjectMentorshipService {
         suggestions: evaluation.suggestions
       }));
 
-      console.log('✅ 获取项目评价成功，数量:', formattedEvaluations.length);
+      this.logger.info('获取项目评价成功', { count: formattedEvaluations.length });
       return formattedEvaluations;
     } catch (error) {
-      console.error('❌ 获取项目评价失败:', error);
+      this.logger.logBusinessException('获取项目评价', error);
       throw new Error(`获取项目评价失败: ${error.message}`);
     }
   }
@@ -828,7 +883,7 @@ export class ProjectMentorshipService {
     category?: string,
     currentUserId?: string
   ) {
-    console.log('🔍 ProjectMentorshipService: 获取带教标准 - 项目ID:', projectId, '分类:', category);
+    this.logger.debug('获取带教标准', { projectId, category });
 
     try {
       // 模拟返回带教标准数据
@@ -860,10 +915,10 @@ export class ProjectMentorshipService {
         ? mockStandards.filter(std => std.category === category)
         : mockStandards;
 
-      console.log('✅ 获取带教标准成功，数量:', filteredStandards.length);
+      this.logger.info('获取带教标准成功', { count: filteredStandards.length });
       return filteredStandards;
     } catch (error) {
-      console.error('❌ 获取带教标准失败:', error);
+      this.logger.logBusinessException('获取带教标准', error);
       throw new Error(`获取带教标准失败: ${error.message}`);
     }
   }
@@ -943,7 +998,7 @@ export class ProjectMentorshipService {
    */
   async getStudentTaskDetails(projectId: string, studentId: string, currentUserId?: string) {
     try {
-      console.log('🔍 ProjectMentorshipService: 获取学员任务详情', { projectId, studentId });
+      this.logger.debug('获取学员任务详情', { projectId, studentId });
 
       // 1. 验证学员是否参与项目
       const participant = await this.prisma.projectParticipant.findFirst({
@@ -955,7 +1010,7 @@ export class ProjectMentorshipService {
         }
       });
 
-      console.log('📋 项目参与者查询结果:', participant);
+      this.logger.debug('项目参与者查询结果', { hasParticipant: !!participant });
 
       if (!participant) {
         // 检查学员是否存在
@@ -968,7 +1023,7 @@ export class ProjectMentorshipService {
           throw new Error(`学员不存在: ${studentId}`);
         }
         
-        console.log('⚠️ 学员存在但未参与项目，返回基础信息');
+        this.logger.warn('学员存在但未参与项目，返回基础信息');
         // 学员存在但未参与项目，返回基础信息
         return {
           student: {
@@ -1139,7 +1194,7 @@ export class ProjectMentorshipService {
       };
 
     } catch (error) {
-      console.error('❌ ProjectMentorshipService: 获取学员任务详情失败:', error);
+      this.logger.logBusinessException('获取学员任务详情', error);
       throw new Error(`获取学员任务详情失败: ${error.message}`);
     }
   }
@@ -1165,7 +1220,7 @@ export class ProjectMentorshipService {
     currentUserId?: string
   ) {
     try {
-      console.log('🔍 ProjectMentorshipService: 创建师徒反馈', { projectId, studentId });
+      this.logger.debug('创建师徒反馈', { projectId, studentId });
 
       // 1. 验证师徒关系是否存在
       const mentorshipRelation = await this.prisma.mentorshipRelationship.findFirst({
@@ -1218,13 +1273,13 @@ export class ProjectMentorshipService {
       };
 
       // 5. 暂时将反馈数据保存在内存中（后续可以扩展数据库表存储）
-      console.log('📝 师徒反馈详情:', JSON.stringify(detailedFeedback, null, 2));
+      this.logger.debug('师徒反馈详情', { feedbackId: detailedFeedback.id });
 
-      console.log('✅ ProjectMentorshipService: 师徒反馈创建成功', detailedFeedback.id);
+      this.logger.info('师徒反馈创建成功', { feedbackId: detailedFeedback.id });
       return detailedFeedback;
 
     } catch (error) {
-      console.error('❌ ProjectMentorshipService: 创建师徒反馈失败:', error);
+      this.logger.logBusinessException('创建师徒反馈', error);
       throw new Error(`创建师徒反馈失败: ${error.message}`);
     }
   }
@@ -1234,11 +1289,11 @@ export class ProjectMentorshipService {
    */
   async getStudentFeedback(projectId: string, studentId: string, currentUserId?: string) {
     try {
-      console.log('🔍 ProjectMentorshipService: 获取学员反馈记录', { projectId, studentId });
+      this.logger.debug('获取学员反馈记录', { projectId, studentId });
 
       // 暂时返回空数组，因为反馈目前保存在内存中
       // 后续可以扩展数据库表来持久化存储师徒反馈
-      console.log('📋 反馈功能开发中，暂时返回空列表');
+      this.logger.debug('反馈功能开发中，返回空列表');
       
       const formattedFeedbacks = [
         // 示例反馈数据
@@ -1258,11 +1313,11 @@ export class ProjectMentorshipService {
         }
       ];
 
-      console.log('✅ ProjectMentorshipService: 获取反馈记录成功，数量:', formattedFeedbacks.length);
+      this.logger.info('获取反馈记录成功', { count: formattedFeedbacks.length });
       return formattedFeedbacks;
 
     } catch (error) {
-      console.error('❌ ProjectMentorshipService: 获取反馈记录失败:', error);
+      this.logger.logBusinessException('获取反馈记录', error);
       throw new Error(`获取反馈记录失败: ${error.message}`);
     }
   }
@@ -1377,7 +1432,7 @@ export class ProjectMentorshipService {
     reason?: string,
     currentUserId?: string
   ) {
-    console.log('📝 ProjectMentorshipService: 更新师徒关系状态 - 关系ID:', relationshipId, '新状态:', status);
+    this.logger.info('更新师徒关系状态', { relationshipId, newStatus: status });
 
     try {
       // 首先尝试在数据库中查找并更新关系
@@ -1448,7 +1503,7 @@ export class ProjectMentorshipService {
           actualDuration: dbUpdatedRelationship.actualDuration
         };
 
-        console.log('✅ 已更新数据库中的师徒关系状态 - 新状态:', status);
+        this.logger.info('数据库中师徒关系状态更新成功', { newStatus: status });
       } else {
         // 如果数据库中没有找到，则更新内存中的数据（向后兼容）
         if (this.createdRelationships.has(relationshipId)) {
@@ -1460,7 +1515,7 @@ export class ProjectMentorshipService {
           
           // 更新存储的关系
           this.createdRelationships.set(relationshipId, relationship);
-          console.log('✅ 已更新内存中的关系状态 - 新状态:', status);
+          this.logger.debug('内存中关系状态更新成功', { newStatus: status });
         }
 
         updatedRelationship = {
@@ -1472,10 +1527,10 @@ export class ProjectMentorshipService {
         };
       }
 
-      console.log('✅ 师徒关系状态更新成功 - 新状态:', status);
+      this.logger.info('师徒关系状态更新成功', { newStatus: status });
       return updatedRelationship;
     } catch (error) {
-      console.error('❌ 更新师徒关系状态失败:', error);
+      this.logger.logBusinessException('更新师徒关系状态', error);
       throw new Error(`更新状态失败: ${error.message}`);
     }
   }

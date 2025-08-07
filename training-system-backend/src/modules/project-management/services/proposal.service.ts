@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
+import { LoggerService } from '../../../shared/infrastructure/logger/logger.service';
+import { WriteOperation, ReadOperation } from '../../../shared/decorators/database-operation.decorator';
 import {
   CreateProposalDto,
   UpdateProposalDto,
@@ -12,13 +14,17 @@ import {
 
 @Injectable()
 export class ProposalService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly logger: LoggerService
+  ) {}
 
   /**
    * 创建方案
    */
+  @WriteOperation('创建项目方案', ['projectProposal'])
   async createProposal(createDto: CreateProposalDto, createdBy: string) {
-    console.log('🔄 创建项目方案:', createDto);
+    this.logger.info('创建项目方案', { title: createDto.title, projectId: createDto.projectId });
 
     // 检查项目是否存在
     const project = await this.prisma.trainingProject.findUnique({
@@ -60,11 +66,11 @@ export class ProposalService {
     });
 
     if (existingProposal) {
-      console.log('✅ 找到现有方案，返回现有方案:', existingProposal.id);
+      this.logger.info('找到现有方案', { proposalId: existingProposal.id });
       
       // 如果现有方案已经提交或审批中，不允许重复创建/提交
       if (existingProposal.status !== 'DRAFT' && existingProposal.status !== 'REJECTED') {
-        console.log('⚠️ 现有方案状态为:', existingProposal.status, '不允许重新提交');
+        this.logger.warn('现有方案状态不允许重新提交', { status: existingProposal.status });
       }
       
       return existingProposal;
@@ -111,7 +117,7 @@ export class ProposalService {
     // 创建默认审批流程
     await this.createDefaultApprovalSteps(proposal.id);
 
-    console.log('✅ 方案创建成功:', proposal.id);
+    this.logger.info('方案创建成功', { proposalId: proposal.id });
     return proposal;
   }
 

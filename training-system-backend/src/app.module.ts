@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
 // 共享模块
 import { DatabaseModule } from './shared/infrastructure/database/database.module';
+import { LoggerModule } from './shared/infrastructure/logger/logger.module';
 import { AuthModule } from './shared/auth/auth.module';
 
 // 业务模块
@@ -20,6 +21,9 @@ import { GrowthDevelopmentModule } from './modules/growth-development/growth-dev
 // 应用控制器和服务
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+
+// 全局过滤器
+import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 
 @Module({
   imports: [
@@ -41,6 +45,7 @@ import { AppService } from './app.service';
     EventEmitterModule.forRoot(),
 
     // 基础设施模块
+    LoggerModule,
     DatabaseModule,
     AuthModule,
 
@@ -59,6 +64,11 @@ import { AppService } from './app.service';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    // 全局异常过滤器
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
     },
   ],
 })

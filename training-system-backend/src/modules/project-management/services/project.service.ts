@@ -1,5 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
+import { LoggerService } from '../../../shared/infrastructure/logger/logger.service';
+import { DatabaseTransactionService } from '../../../shared/services/database-transaction.service';
+import { WriteOperation, ReadOperation, BatchOperation } from '../../../shared/decorators/database-operation.decorator';
 
 export interface CreateProjectDto {
   name: string;
@@ -53,7 +56,11 @@ export interface UpdateStageDto {
 
 @Injectable()
 export class ProjectService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly logger: LoggerService,
+    private readonly dbTransaction: DatabaseTransactionService
+  ) {}
 
   /**
    * 创建培训项目
@@ -93,7 +100,7 @@ export class ProjectService {
 
     // 🔧 新增：同步分组数据到数据库
     if (createDto.config && createDto.config.groups && Array.isArray(createDto.config.groups)) {
-      console.log('🔧 创建项目时同步分组数据到数据库...');
+      this.logger.debug('创建项目时同步分组数据到数据库');
       await this.syncGroupsToDatabase(project.id, createDto.config.groups);
     }
 
@@ -288,11 +295,11 @@ export class ProjectService {
   async updateProject(id: string, updateDto: UpdateProjectDto, currentUserId: string) {
     // 🔍 添加议程数据调试日志
     if (updateDto.config && updateDto.config.agenda) {
-      console.log('🔍 后端接收到的议程数据:', JSON.stringify(updateDto.config.agenda, null, 2));
-      console.log('🔍 议程天数:', updateDto.config.agenda.days?.length || 0);
+      this.logger.debug('后端接收到的议程数据', { dayCount: updateDto.config.agenda.days?.length || 0 });
+      // 已合并到上一条日志
       if (updateDto.config.agenda.days) {
         updateDto.config.agenda.days.forEach((day: any, index: number) => {
-          console.log(`🔍 第${index + 1}天 - 日期: ${day.date}, 议程项: ${day.items?.length || 0}`);
+          this.logger.debug(`第${index + 1}天议程`, { date: day.date, itemCount: day.items?.length || 0 });
         });
       }
     }
@@ -321,14 +328,14 @@ export class ProjectService {
     let mergedConfig = (project.config as any) || {};
     
     if (updateDto.config) {
-      console.log('🔧 合并前的config:', JSON.stringify(mergedConfig, null, 2));
-      console.log('🔧 前端传来的config:', JSON.stringify(updateDto.config, null, 2));
-      console.log('🔧 🎯 检查division字段:', {
-        '前端有division': !!updateDto.config.division,
-        '前端division内容': updateDto.config.division,
-        '原有division': mergedConfig.division
+      this.logger.debug('合并前的config', { hasConfig: !!mergedConfig });
+      this.logger.debug('前端传来的config', { hasNewConfig: !!updateDto.config });
+      this.logger.debug('检查division字段', {
+        hasFrontendDivision: !!updateDto.config.division,
+        frontendDivision: updateDto.config.division,
+        originalDivision: mergedConfig.division
       });
-      console.log('🔧 🔍 前端传来的项目类型:', updateDto.config.type, '(类型:', typeof updateDto.config.type, ')');
+      this.logger.debug('前端传来的项目类型', { type: updateDto.config.type, typeOf: typeof updateDto.config.type });
       
       // 智能合并策略：
       // 1. 保留后端的系统配置（enabledModules, workflows）
@@ -377,13 +384,12 @@ export class ProjectService {
         }, {} as any),
       };
       
-      console.log('🔧 合并后的config:', JSON.stringify(mergedConfig, null, 2));
-      console.log('🔧 🔍 合并后的项目类型:', mergedConfig.type, '(类型:', typeof mergedConfig.type, ')');
-      console.log('🔧 🎯 合并后的division:', {
-        '有division': !!mergedConfig.division,
-        'division内容': mergedConfig.division,
-        '角色数量': mergedConfig.division?.roles?.length || 0,
-        '任务数量': mergedConfig.division?.tasks?.length || 0
+      this.logger.debug('合并后的config', { finalConfig: !!mergedConfig });
+      this.logger.debug('合并后的项目类型', { type: mergedConfig.type, typeOf: typeof mergedConfig.type });
+      this.logger.debug('合并后的division', {
+        hasDivision: !!mergedConfig.division,
+        rolesCount: mergedConfig.division?.roles?.length || 0,
+        tasksCount: mergedConfig.division?.tasks?.length || 0
       });
     }
 

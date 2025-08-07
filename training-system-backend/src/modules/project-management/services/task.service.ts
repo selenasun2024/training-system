@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
+import { LoggerService } from '../../../shared/infrastructure/logger/logger.service';
+import { DatabaseTransactionService } from '../../../shared/services/database-transaction.service';
+import { WriteOperation, ReadOperation, BatchOperation } from '../../../shared/decorators/database-operation.decorator';
 import { CreateTaskDto, UpdateTaskDto } from '../dto/task.dto';
 
 export interface TaskForReview {
@@ -21,13 +24,18 @@ export interface StudentSubmission {
 
 @Injectable()
 export class TaskService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly logger: LoggerService,
+    private readonly dbTransaction: DatabaseTransactionService
+  ) {}
 
   /**
    * 创建任务
    */
+  @WriteOperation('创建任务', ['trainingTask', 'trainingStage'])
   async createTask(createTaskDto: CreateTaskDto) {
-    console.log('📝 TaskService: 创建任务 - ', createTaskDto);
+    this.logger.info('创建任务', { title: createTaskDto.title, type: createTaskDto.type });
 
     // 验证项目是否存在
     const project = await this.prisma.trainingProject.findUnique({
@@ -43,7 +51,7 @@ export class TaskService {
     
     // 如果stageId等于projectId，说明是简化调用，我们需要找到或创建一个默认阶段
     if (createTaskDto.stageId === createTaskDto.projectId) {
-      console.log('📝 TaskService: 检测到简化调用，查找或创建默认阶段');
+      this.logger.debug('检测到简化调用，查找或创建默认阶段');
       
       // 查找项目的第一个DURING阶段
       stage = await this.prisma.trainingStage.findFirst({
@@ -55,7 +63,7 @@ export class TaskService {
 
       // 如果没有DURING阶段，创建一个
       if (!stage) {
-        console.log('📝 TaskService: 创建默认DURING阶段');
+        this.logger.debug('创建默认DURING阶段');
         stage = await this.prisma.trainingStage.create({
           data: {
             project: {
@@ -69,7 +77,7 @@ export class TaskService {
             config: {},
           },
         });
-        console.log('✅ TaskService: 默认阶段创建成功:', stage.id);
+        this.logger.info('默认阶段创建成功', { stageId: stage.id });
       }
     } else {
       // 正常验证阶段
@@ -93,7 +101,7 @@ export class TaskService {
       orderIndex = taskCount;
     }
 
-    console.log('📝 TaskService: 准备创建任务，最终阶段ID:', stage.id);
+    this.logger.debug('准备创建任务', { finalStageId: stage.id });
 
     // 创建任务
     const task = await this.prisma.trainingTask.create({
@@ -129,7 +137,7 @@ export class TaskService {
       },
     });
 
-    console.log('✅ TaskService: 任务创建成功 - ID:', task.id);
+    this.logger.info('任务创建成功', { taskId: task.id });
     return task;
   }
 
@@ -137,7 +145,7 @@ export class TaskService {
    * 更新任务
    */
   async updateTask(taskId: string, updateTaskDto: UpdateTaskDto) {
-    console.log('✏️ TaskService: 更新任务 - ID:', taskId, '数据:', updateTaskDto);
+    this.logger.info('更新任务', { taskId, updateData: updateTaskDto });
 
     // 验证任务是否存在
     const existingTask = await this.prisma.trainingTask.findUnique({
@@ -172,7 +180,7 @@ export class TaskService {
       },
     });
 
-    console.log('✅ TaskService: 任务更新成功 - ID:', task.id);
+    this.logger.info('任务更新成功', { taskId: task.id });
     return task;
   }
 
@@ -184,7 +192,7 @@ export class TaskService {
     projectId?: string,
     counselorId?: string, // 新增：指定辅导员ID
   ): Promise<TaskForReview[]> {
-    console.log('🔍 TaskService: 获取待审核任务 - 角色:', role, '项目ID:', projectId, '辅导员ID:', counselorId);
+    this.logger.debug('获取待审核任务', { role, projectId, counselorId });
 
     if (role === 'counselor' && counselorId) {
       // 新的分组权限模式：只获取该辅导员负责分组中学员的任务
@@ -228,7 +236,7 @@ export class TaskService {
       },
     });
 
-    console.log('🔍 TaskService: 找到任务数量:', tasks.length);
+    this.logger.debug('找到任务数量', { count: tasks.length });
 
     const result: TaskForReview[] = tasks
       .filter(task => task.submissions.length > 0)
@@ -247,7 +255,7 @@ export class TaskService {
         })),
       }));
 
-    console.log('🔍 TaskService: 转换后的任务数量:', result.length);
+    this.logger.debug('🔍 TaskService: 转换后的任务数量:', result.length);
     return result;
   }
 
@@ -259,7 +267,7 @@ export class TaskService {
     projectId?: string,
     counselorId?: string,
   ): Promise<TaskForReview[]> {
-    console.log('🔍 TaskService: 获取已批阅任务 - 角色:', role, '项目ID:', projectId, '辅导员ID:', counselorId);
+    this.logger.debug('🔍 TaskService: 获取已批阅任务 - 角色:', role, '项目ID:', projectId, '辅导员ID:', counselorId);
 
     if (role === 'counselor' && counselorId) {
       // 新的分组权限模式：只获取该辅导员负责分组中学员的已批阅任务
@@ -322,7 +330,7 @@ export class TaskService {
         })),
       }));
 
-    console.log('🔍 TaskService: 已批阅任务数量:', result.length);
+    this.logger.debug('🔍 TaskService: 已批阅任务数量:', result.length);
     return result;
   }
 
@@ -333,7 +341,7 @@ export class TaskService {
     counselorId: string,
     projectId?: string,
   ): Promise<TaskForReview[]> {
-    console.log('🔍 TaskService: 基于分组权限获取辅导员批阅任务 - 辅导员ID:', counselorId);
+    this.logger.debug('🔍 TaskService: 基于分组权限获取辅导员批阅任务 - 辅导员ID:', counselorId);
 
     // 1. 查找该辅导员作为LEADER的分组
     const counselorGroups = await this.prisma.groupMember.findMany({
@@ -369,10 +377,10 @@ export class TaskService {
       }
     });
 
-    console.log(`🔍 辅导员 ${counselorId} 负责的分组数量: ${counselorGroups.length}`);
+    this.logger.debug(`🔍 辅导员 ${counselorId} 负责的分组数量: ${counselorGroups.length}`);
 
     if (counselorGroups.length === 0) {
-      console.log('🔍 该辅导员没有负责任何分组');
+      this.logger.debug('🔍 该辅导员没有负责任何分组');
       return [];
     }
 
@@ -384,7 +392,7 @@ export class TaskService {
     if (projectId) {
       // 如果指定了项目ID，只获取该项目的分组
       const filteredGroups = activeGroups.filter(g => g.group.project.id === projectId);
-      console.log(`🔍 指定项目 ${projectId} 中的分组数量: ${filteredGroups.length}`);
+      this.logger.debug(`🔍 指定项目 ${projectId} 中的分组数量: ${filteredGroups.length}`);
     }
 
     const targetGroups = projectId 
@@ -415,11 +423,11 @@ export class TaskService {
       }
     }
 
-    console.log(`🔍 负责的学员数量: ${studentIds.size}`);
-    console.log(`🔍 负责的项目数量: ${responsibleProjectIds.size}`);
+    this.logger.debug(`🔍 负责的学员数量: ${studentIds.size}`);
+    this.logger.debug(`🔍 负责的项目数量: ${responsibleProjectIds.size}`);
 
     if (studentIds.size === 0) {
-      console.log('🔍 没有找到负责的学员');
+      this.logger.debug('🔍 没有找到负责的学员');
       return [];
     }
 
@@ -456,7 +464,7 @@ export class TaskService {
       },
     });
 
-    console.log('🔍 TaskService: 找到的任务数量:', tasks.length);
+    this.logger.debug('🔍 TaskService: 找到的任务数量:', tasks.length);
 
     // 5. 转换为前端期望的格式
     const result: TaskForReview[] = tasks
@@ -476,7 +484,7 @@ export class TaskService {
         })),
       }));
 
-    console.log('🔍 TaskService: 基于分组权限的任务数量:', result.length);
+    this.logger.debug('🔍 TaskService: 基于分组权限的任务数量:', result.length);
     return result;
   }
 
@@ -487,7 +495,7 @@ export class TaskService {
     counselorId: string,
     projectId?: string,
   ): Promise<TaskForReview[]> {
-    console.log('🔍 TaskService: 基于分组权限获取辅导员已批阅任务 - 辅导员ID:', counselorId);
+    this.logger.debug('🔍 TaskService: 基于分组权限获取辅导员已批阅任务 - 辅导员ID:', counselorId);
 
     // 1. 查找该辅导员作为LEADER的分组
     const counselorGroups = await this.prisma.groupMember.findMany({
@@ -523,10 +531,10 @@ export class TaskService {
       }
     });
 
-    console.log(`🔍 辅导员 ${counselorId} 负责的分组数量: ${counselorGroups.length}`);
+    this.logger.debug(`🔍 辅导员 ${counselorId} 负责的分组数量: ${counselorGroups.length}`);
 
     if (counselorGroups.length === 0) {
-      console.log('🔍 该辅导员没有负责任何分组');
+      this.logger.debug('🔍 该辅导员没有负责任何分组');
       return [];
     }
 
@@ -538,7 +546,7 @@ export class TaskService {
     if (projectId) {
       // 如果指定了项目ID，只获取该项目的分组
       const filteredGroups = activeGroups.filter(g => g.group.project.id === projectId);
-      console.log(`🔍 指定项目 ${projectId} 中的分组数量: ${filteredGroups.length}`);
+      this.logger.debug(`🔍 指定项目 ${projectId} 中的分组数量: ${filteredGroups.length}`);
     }
 
     const targetGroups = projectId 
@@ -569,11 +577,11 @@ export class TaskService {
       }
     }
 
-    console.log(`🔍 负责的学员数量: ${studentIds.size}`);
-    console.log(`🔍 负责的项目数量: ${responsibleProjectIds.size}`);
+    this.logger.debug(`🔍 负责的学员数量: ${studentIds.size}`);
+    this.logger.debug(`🔍 负责的项目数量: ${responsibleProjectIds.size}`);
 
     if (studentIds.size === 0) {
-      console.log('🔍 没有找到负责的学员');
+      this.logger.debug('🔍 没有找到负责的学员');
       return [];
     }
 
@@ -610,7 +618,7 @@ export class TaskService {
       },
     });
 
-    console.log('🔍 TaskService: 找到的任务数量:', tasks.length);
+    this.logger.debug('🔍 TaskService: 找到的任务数量:', tasks.length);
 
     // 5. 转换为前端期望的格式
     const result: TaskForReview[] = tasks
@@ -630,76 +638,87 @@ export class TaskService {
         })),
       }));
 
-    console.log('🔍 TaskService: 基于分组权限的任务数量:', result.length);
+    this.logger.debug('🔍 TaskService: 基于分组权限的任务数量:', result.length);
     return result;
   }
 
   /**
    * 学生提交作业
    */
+  @WriteOperation('学生提交作业', ['taskSubmission'])
   async submitTask(taskId: string, studentId: string, content: string, filePaths: string[] = []) {
-    console.log('📝 TaskService: 学生提交作业 - 任务ID:', taskId, '学生ID:', studentId);
+    this.logger.info('学生提交作业', { taskId, studentId });
 
-    // 验证任务是否存在
-    const task = await this.prisma.trainingTask.findUnique({
-      where: { id: taskId },
-    });
+    // 使用事务确保作业提交的原子性
+    return await this.dbTransaction.executeTransaction(
+      async (tx) => {
+        // 验证任务是否存在
+        const task = await tx.trainingTask.findUnique({
+          where: { id: taskId },
+        });
 
-    if (!task) {
-      throw new Error('任务不存在');
-    }
+        if (!task) {
+          throw new Error('任务不存在');
+        }
 
-    // 验证学生是否存在
-    const student = await this.prisma.user.findUnique({
-      where: { id: studentId },
-    });
+        // 验证学生是否存在
+        const student = await tx.user.findUnique({
+          where: { id: studentId },
+        });
 
-    if (!student) {
-      throw new Error('学生不存在');
-    }
+        if (!student) {
+          throw new Error('学生不存在');
+        }
 
-    // 检查是否已经提交过
-    const existingSubmission = await this.prisma.taskSubmission.findUnique({
-      where: {
-        taskId_studentId: {
-          taskId: taskId,
-          studentId: studentId,
-        },
-      },
-    });
+        // 检查是否已经提交过
+        const existingSubmission = await tx.taskSubmission.findUnique({
+          where: {
+            taskId_studentId: {
+              taskId: taskId,
+              studentId: studentId,
+            },
+          },
+        });
 
-    if (existingSubmission) {
-      // 如果已提交但还未批阅，允许更新
-      if (existingSubmission.status === 'SUBMITTED') {
-        const updatedSubmission = await this.prisma.taskSubmission.update({
-          where: { id: existingSubmission.id },
+        if (existingSubmission) {
+          // 如果已提交但还未批阅，允许更新
+          if (existingSubmission.status === 'SUBMITTED') {
+            const updatedSubmission = await tx.taskSubmission.update({
+              where: { id: existingSubmission.id },
+              data: {
+                content: content,
+                filePaths: filePaths,
+                submittedAt: new Date(),
+              },
+            });
+            this.logger.info('作业重新提交成功', { submissionId: updatedSubmission.id });
+            return updatedSubmission;
+          } else {
+            throw new Error('作业已经被批阅，无法重新提交');
+          }
+        }
+
+        // 创建新的提交记录
+        const submission = await tx.taskSubmission.create({
           data: {
+            taskId: taskId,
+            studentId: studentId,
             content: content,
             filePaths: filePaths,
+            status: 'SUBMITTED',
             submittedAt: new Date(),
           },
         });
-        console.log('✅ TaskService: 作业重新提交成功');
-        return updatedSubmission;
-      } else {
-        throw new Error('作业已经被批阅，无法重新提交');
-      }
-    }
 
-    // 创建新的提交记录
-    const submission = await this.prisma.taskSubmission.create({
-      data: {
-        taskId: taskId,
-        studentId: studentId,
-        content: content,
-        filePaths: filePaths,
-        status: 'SUBMITTED',
-        submittedAt: new Date(),
+        this.logger.info('作业提交成功', { submissionId: submission.id });
+        return submission;
       },
-    });
-
-    console.log('✅ TaskService: 作业提交成功 - 提交ID:', submission.id);
-    return submission;
+      {
+        name: '学生提交作业',
+        timeout: 10000,
+        verbose: true
+      }
+    );
   }
 
   /**
@@ -711,7 +730,7 @@ export class TaskService {
     score: number,
     feedback?: string,
   ): Promise<void> {
-    console.log('📝 TaskService: 提交评分 - 任务ID:', taskId, '学员ID:', userId, '分数:', score);
+    this.logger.debug('📝 TaskService: 提交评分 - 任务ID:', taskId, '学员ID:', userId, '分数:', score);
 
     // 验证任务是否存在
     const task = await this.prisma.trainingTask.findUnique({
@@ -755,14 +774,14 @@ export class TaskService {
       },
     });
 
-    console.log('✅ TaskService: 评分提交成功');
+    this.logger.debug('✅ TaskService: 评分提交成功');
   }
 
   /**
    * 获取任务详情
    */
   async getTaskDetail(taskId: string) {
-    console.log('🔍 TaskService: 获取任务详情 - 任务ID:', taskId);
+    this.logger.debug('🔍 TaskService: 获取任务详情 - 任务ID:', taskId);
 
     const task = await this.prisma.trainingTask.findUnique({
       where: { id: taskId },
@@ -832,7 +851,7 @@ export class TaskService {
    * 获取学生的作业任务列表
    */
   async getStudentTasks(userId: string) {
-    console.log('📝 TaskService: 获取学生作业任务 - 学生ID:', userId);
+    this.logger.debug('📝 TaskService: 获取学生作业任务 - 学生ID:', userId);
     
     // 查找学员参与的项目
     const participations = await this.prisma.projectParticipant.findMany({
@@ -898,7 +917,7 @@ export class TaskService {
       }
     }
 
-    console.log('✅ TaskService: 学生任务列表获取成功，任务数量:', tasks.length);
+    this.logger.debug('✅ TaskService: 学生任务列表获取成功，任务数量:', tasks.length);
     return tasks;
   }
 
@@ -906,7 +925,7 @@ export class TaskService {
    * 删除任务
    */
   async deleteTask(id: string, currentUserId: string) {
-    console.log('🗑️ TaskService: 删除任务 - 任务ID:', id);
+    this.logger.debug('🗑️ TaskService: 删除任务 - 任务ID:', id);
 
     // 检查任务是否存在
     const task = await this.prisma.trainingTask.findUnique({
@@ -941,7 +960,7 @@ export class TaskService {
       where: { id },
     });
 
-    console.log('✅ TaskService: 任务删除成功');
+    this.logger.debug('✅ TaskService: 任务删除成功');
     return { message: '任务删除成功' };
   }
 }
